@@ -1,0 +1,59 @@
+Expected use case: 100GB storage under mgmt, 300GB virtual space.
+Max use case: 1PB storage.
+
+Block size: 4096 bytes.
+
+100GB = 25M blocks.
+1TB = 260M blocks
+10TB = 2 billion blocks
+100TB = 20 billion blocks
+1PB = 200 billion blocks
+
+We'll store multiple blocks per bundle.  How many bundles do we need?
+
+      | bl/bu
+size  | 512    4096   16384
+------+--------------------
+100GB | 50k    6400   1600
+1TB   | 500k   64k    16k
+10TB  | 5M     600k   160k
+100TB | 50M    6M     1.6M
+1PB   | 500M   60M    16M
+
+What's the storage overhead of 16k blocks per bundle -- at 4k with 8 byte CID,
+128k per bundle of overhead.  First 10 blocks in the FS requires 10 bundles
+on average with 128k of overhead per, ~1MB for first 40k written.
+
+Idea!  Let bundle allocations scale without bound starting from a minimum.
+Every undupfs will have bundles 0 .. f, for a minimum storage overhead
+(supposing 16k blocks per bundle) of
+16384 * 8 * 16 = 2MB 
+(blocks/bundle) * (bytes/CID) * minimum bundles
+
+When a bundle fills up, it splits for further allocations.  So if bundle `a`
+fills up, then `a/{0..f}` are created to hold further allocations.  Existing
+blocks are not moved, so finding blocks a4ee... requires checking bundle `a`
+then looking in bundle `a/4` then potentially `a/4/e` and so on.
+
+
+Problem.  we need some way to delete blocks.  Blocks that are referred to from a
+single file are easy (if we know so); when the file content changes, the
+previous block becomes unreferenced and is marked to be overwritten.
+Multireference blocks are harder.  We could keep a reference count in the bundle
+header; giving up 2 bytes of the CID (down to 48 bits of ID) is probably doable
+but would kinda suck.
+
+Could use a single bit to denote "single reference" versus "multi reference",
+on the theory that multireference blocks are less likely to be deleted.  Then
+freeing single reference blocks is trivial, while orphaned multiref blocks would
+need a mark and sweep GC or similar.
+
+It would be really nice to avoid needing a GC.
+
+The single bit idea could be extended to a saturating counter of any bittiness,
+4 bits perhaps.  Still requires a GC though, and I suspect the rewards are very
+diminishing -- single versus multi is probably a big win, but 2->bigN is
+probably a smaller ramp.  Could use some real world numbers here, but just
+consider the target use case of multiple VMs running the same guest OS.
+
+
