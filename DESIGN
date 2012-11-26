@@ -10,15 +10,15 @@ In this example, `/data` is the "undupfs mount" and `/var/data.undupfs` is the
 
 == METADATA ==
 
-File metadata such as owner, permissions, mtime, atime are drawn from the
-inode on the host directory.  Following our example, `/data/hello.txt` will
-be represented by a stub file `/var/data.undupfs/hello.txt`.
+File metadata such as owner, permissions, mtime, atime are drawn from the inode
+on the host directory.  Following our example, `/data/hello.txt` will be
+represented by a stub file `/var/data.undupfs/hello.txt`.
 
 == TOC ==
 
-The stub file in the host directory is used to store undupfs metadata and,
-for short files, file content.  All fields are stored big endian.  The stub
-file begins with a header:
+The stub file in the host directory is used to store undupfs metadata and, for
+short files, file content.  All fields are stored big endian.  The stub file
+begins with a header:
 
     struct undup_hdr {
         u32 magic;      // UDFS = 0x55 0x44 0x46 0x53
@@ -39,15 +39,14 @@ Non-DIRECT stub files have $ceil(`len` / 4096)$ CID values starting after the
 
 == CONTENT STORAGE ==
 
-File content is stored in a separate directory tree, .undup/ in the root of
-the host directory.  Content is managed in 4KiB blocks.  Each block is
-identified by a 64-bit Content ID (cid), frequently rendered as 16 hex digits.
-The CID is computed as the first 8 bytes of the SHA-1 hash of the data block.
-Blocks are stored in bundle files identified by CID.  For example the block
-with CID 1122334455667788 might be found in .undup/1122/334445566.  A bundle
-file consists of a TOC `struct undup_bundle` followed by zero or more data
-blocks.  The TOC starts with 8 bytes of header followed by 511 "slots" of 8
-bytes each.
+File content is stored in a separate directory tree, .undup/ in the root of the
+host directory.  Content is managed in 4KiB blocks.  Each block is identified
+by a 64-bit Content ID (cid), frequently rendered as 16 hex digits.  The CID is
+computed as the first 8 bytes of the SHA-1 hash of the data block.  Blocks are
+stored in bundle files identified by CID.  For example the block with CID
+1122334455667788 might be found in .undup/1122/334445566.  A bundle file
+consists of a TOC `struct undup_bundle` followed by zero or more data blocks.
+The TOC starts with 8 bytes of header followed by 511 "slots" of 8 bytes each.
 
     struct undup_bundle {
         u32 magic;      // UDBN = 0x55 0x44 0x42 0x4e
