@@ -49,7 +49,7 @@ static int undup_getattr(const char *path, struct stat *stbuf)
         return -ENAMETOOLONG;
 
     n = stat(b, stbuf);
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -91,7 +91,7 @@ static int undup_mkdir(const char *path, mode_t mode)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_unlink(const char *path)
@@ -102,7 +102,7 @@ static int undup_unlink(const char *path)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_rmdir(const char *path)
@@ -113,7 +113,7 @@ static int undup_rmdir(const char *path)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_rename(const char *from, const char *to)
@@ -130,7 +130,7 @@ static int undup_rename(const char *from, const char *to)
         return -ENAMETOOLONG;
 
     n = rename(b, c);
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_truncate(const char *path, off_t size)
@@ -141,6 +141,7 @@ static int undup_truncate(const char *path, off_t size)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_open(const char *path, struct fuse_file_info *fi)
@@ -151,6 +152,9 @@ static int undup_open(const char *path, struct fuse_file_info *fi)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    n = open(path, fi->flags);
+    return n == -1 ? -errno : 0;
 }
 
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,
@@ -162,7 +166,7 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static int undup_write(const char *path, const char *buf, size_t size,
@@ -174,7 +178,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == 0 ? 0 : -errno;
+    return n == -1 ? -errno : n;
 }
 
 static struct fuse_operations undup_oper = {
