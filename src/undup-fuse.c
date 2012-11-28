@@ -25,6 +25,10 @@
 
 struct undup_state {
     char *basedir;
+    int hashsz;
+    int blksz;
+    int blkshift;
+    int fd;
 };
 
 static struct undup_state *state;
@@ -37,6 +41,51 @@ static void die(char *fmt, ...)
     vfprintf(stderr, fmt, ap);
     va_end(ap);
     exit(1);
+}
+
+static int o_verbose = 0;
+
+static void verbose(char *fmt, ...)
+{
+    va_list ap;
+
+    if (!o_verbose) return;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+/*
+ * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
+ * If not found, return 0.  On error, return -1 with errno set.
+ */
+static int lookup_hash(const char *hash, int *fd, off_t *off)
+{
+    int i, j, n;
+    char buf[HASH_BLOCK];
+    off_t blkpos;
+    int hashsz = state->hashsz;
+    int nhash = HASH_BLOCK / hashsz;
+
+    for (i = 0; ; i++) {
+        blkpos = (1 + i) * (1 + nhash);
+        n = pread(state->fd, buf, HASH_BLOCK, blkpos);
+        if (n == -1)
+            return -1;
+        if (n < HASH_BLOCK) {
+            errno = EIO;
+            return -1;
+        }
+        for (j = 0; j < nhash; j++) {
+            if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
+                *fd = state->fd;
+                *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
+                return 1;
+            }
+        }
+    }
+    return 0;
 }
 
 static int undup_getattr(const char *path, struct stat *stbuf)
@@ -161,12 +210,58 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int n;
+    char hash[HASH_MAX];
+    int n, m, err, ret;
+    off_t hashpos, datapos;
+    int fd, datafd;
+    int tot;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == -1 ? -errno : n;
+
+    fd = open(b, O_RDONLY);
+    if (fd == -1)
+        return -errno;
+
+    tot = 0;
+    while (size > 0) {
+        hashpos = UNDUP_HDR_SIZE + (offset >> state->blkshift) * state->hashsz;
+        n = pread(fd, hash, state->hashsz, hashpos);
+        if (n == -1)
+            goto out;
+        if (n < state->hashsz) {
+            errno = EIO;
+            verbose("got %d bytes (needed %d) at %lld (%s)\n",
+                    n, state->hashsz, (long long)hashpos, path);
+            goto out;
+        }
+        ret = lookup_hash(hash, &datafd, &datapos);
+        if (ret == -1)
+            goto out;
+        if (ret == 0) {
+            errno = EIO;
+            goto out;
+        }
+        m = size > state->blksz ? state->blksz : size;
+        n = pread(datafd, buf, m, datapos);
+        if (n == -1)
+            goto out;
+        if (n < m) {
+            errno = -EIO;
+            goto out;
+        }
+        size -= n;
+        buf += n;
+        offset += n;
+        tot += n;
+    }
+
+    return tot;
+out:
+    err = errno;
+    close(fd);
+    return -err;
 }
 
 static int undup_write(const char *path, const char *buf, size_t size,
@@ -178,6 +273,13 @@ static int undup_write(const char *path, const char *buf, size_t size,
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    //calculate hashes
+    //lookup hashes in bucket
+    //if present, write hashes
+    //if not present, write blocks to bucket and write hashes
+    //update length as necessary
+
     return n == -1 ? -errno : n;
 }
 
