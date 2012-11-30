@@ -292,11 +292,34 @@ static int undup_write(const char *path, const char *buf, size_t size,
                        off_t offset, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int n;
+    int n, fd, err, ret;
+    char hash[HASH_MAX];
+    int datafd;
+    off_t datapos;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    fd = open(b, O_RDWR);
+    if (fd == -1)
+        return -errno;
+
+    for (i = 0; i < size; i += state->blksz) {
+        n = size - i;
+        if (n > state->blksz) n = state->blksz;
+        do_hash(hash, buf + i, n);
+        ret = lookup_hash(hash, &datafd, &datapos);
+        if (ret == -1)
+            goto out;
+        if (ret == 0) {
+            // not found, write new block to bucket, write hash
+            write_block(state, fd, buf + i, hash);
+            
+        } else {
+            // found; optionally read+verify data, write hash
+
+    }
 
     //calculate hashes
     //lookup hashes in bucket
