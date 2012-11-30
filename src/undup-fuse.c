@@ -91,21 +91,43 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
 static int undup_getattr(const char *path, struct stat *stbuf)
 {
     char b[PATH_MAX+1];
-    int n;
+    int n, err, fd;
+    off_t flen;
+    struct undup_hdr hdr;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    n = stat(b, stbuf);
-    return n == -1 ? -errno : n;
+    fd = open(b, O_RDONLY);
+    if (fd == -1)
+        return -errno;
+
+    n = fstat(fd, stbuf);
+    if (n == -1)
+        goto out;
+    n = pread(fd, &hdr, sizeof(hdr), 0);
+    if (n == -1)
+        goto out;
+    if (n < sizeof(hdr)) {
+        errno = -EIO;
+        goto out;
+    }
+    stbuf->st_size = hdr.len;
+
+    close(fd);
+    return 0;
+out:
+    err = errno;
+    close(fd);
+    return -err;
 }
 
 static int undup_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                          off_t offset, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int n;
+    int n, err = 0;
     DIR *dp;
     struct dirent *de;
 
@@ -124,12 +146,14 @@ static int undup_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         memset(&st, 0, sizeof(st));
         st.st_ino = de->d_ino;
         st.st_mode = de->d_type << 12;
-        if (filler(buf, de->d_name, &st, 0))
+        if (filler(buf, de->d_name, &st, 0)) {
+            err = errno ? errno : EIO;
             break;
+        }
     }
 
     closedir(dp);
-    return 0;
+    return -err;
 }
 
 static int undup_mkdir(const char *path, mode_t mode)
