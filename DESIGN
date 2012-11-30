@@ -22,7 +22,7 @@ begins with a header:
 
     struct undup_hdr {
         u32 magic;      // UDFS = 0x55 0x44 0x46 0x53
-        u16 version;    // 0x1
+        u16 version_hash; // 0x1 = V1_SHA256
         u16 flags;
         u64 len;
     };
