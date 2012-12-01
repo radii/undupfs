@@ -21,14 +21,19 @@
 #include <sys/types.h>
 #include <dirent.h>
 
+#include <openssl/sha.h>
+
 #include "undupfs.h"
 
 struct undup_state {
     char *basedir;
-    int hashsz;
-    int blksz;
-    int blkshift;
-    int fd;
+    int hashsz;      // the size of a single hash
+    int blksz;       // the size of a block (power of 2)
+    int blkshift;    // the shift for a block (log_2(blksz))
+    int fd;          // filedescriptor to bucketfile
+    off_t bucketlen; // length of bucketfile
+    char *hashblock; // in-progress block of hashes
+    int hbpos;       // current position in hashblock
 };
 
 static struct undup_state *state;
@@ -42,6 +47,9 @@ static void die(char *fmt, ...)
     va_end(ap);
     exit(1);
 }
+
+#define ASSERT(cond_) do { if (!(cond_)) die("%s:%d: ASSERT failed: %s\n", \
+                                        __FILE__, __LINE__, #cond_); } while(0)
 
 static int o_verbose = 0;
 
@@ -92,7 +100,6 @@ static int undup_getattr(const char *path, struct stat *stbuf)
 {
     char b[PATH_MAX+1];
     int n, err, fd;
-    off_t flen;
     struct undup_hdr hdr;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
@@ -288,14 +295,72 @@ out:
     return -err;
 }
 
+/*
+ * Writes the block BLK to file STUBFD at offset BLKOFF with hash HASH.
+ * BLK must be of size state->blksz, BLKOFF must be naturally aligned,
+ * and HASH must be the hash of BLK.
+ *
+ * Since STUBFD is a "stub file" (see DESIGN for details), and we have already
+ * established that HASH is not present in the bucket, a write consists of
+ *  - write BLOCK and HASH to the bucket.
+ *  - write HASH to the appropriate spot in the stub file.
+ *  - update undup_hdr.len if necessary.
+ *
+ * returns 0 on success, or -errno on failure.
+ */
+static int write_block(int stubfd, off_t blkoff, const char *blk, char *hash)
+{
+    off_t hashidx = blkoff >> state->blkshift;
+    off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
+    int n;
+
+    ASSERT((blkoff & (state->blksz-1)) == 0);
+
+    memcpy(state->hashblock + state->hbpos, hash, state->hashsz);
+    state->hbpos += state->hashsz;
+    n = pwrite(state->fd, blk, state->blksz, state->bucketlen);
+    if (n == -1)
+        return -errno;
+    if (n < state->blksz)
+        return -EIO;
+    state->bucketlen += state->blksz;
+    if (state->hbpos == state->blksz) {
+        n = pwrite(state->fd, state->hashblock, state->blksz, state->bucketlen);
+        if (n == -1)
+            return -errno;
+        if (n < state->blksz)
+            return -EIO;
+        state->hbpos = 0;
+        state->bucketlen += state->blksz;
+    }
+    n = pwrite(stubfd, hash, state->hashsz, hashpos);
+    if (n == -1)
+        return -errno;
+    if (n < state->hashsz)
+        return -EIO;
+
+    return 0;
+}
+
+static void do_hash(void *hash, const char *buf, int n)
+{
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    SHA256_Update(&ctx, buf, n);
+    SHA256_Final(hash, &ctx);
+}
+
 static int undup_write(const char *path, const char *buf, size_t size,
                        off_t offset, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int n, fd, err, ret;
+    int i, n, fd, ret;
     char hash[HASH_MAX];
     int datafd;
     off_t datapos;
+
+    ASSERT((size % HASH_BLOCK) == 0);
+    ASSERT((offset % HASH_BLOCK) == 0);
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -313,12 +378,15 @@ static int undup_write(const char *path, const char *buf, size_t size,
         if (ret == -1)
             goto out;
         if (ret == 0) {
-            // not found, write new block to bucket, write hash
-            write_block(state, fd, buf + i, hash);
-            
+            // not found, write new block to bucket, write hash to stubfile
+            return write_block(fd, offset, buf + i, hash);
         } else {
-            // found; optionally read+verify data, write hash
+            off_t hashidx = offset >> state->blkshift;
+            off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
 
+            // found; optionally read+verify data, write hash
+            n = pwrite(fd, hash, state->hashsz, hashpos);
+        }
     }
 
     //calculate hashes
@@ -327,6 +395,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
     //if not present, write blocks to bucket and write hashes
     //update length as necessary
 
+out:
     return n == -1 ? -errno : n;
 }
 
@@ -343,7 +412,55 @@ static struct fuse_operations undup_oper = {
     .rename             = undup_rename,
 };
 
+static int undup_init(const char *basedir)
+{
+    char fname[PATH_MAX];
+    int fd, n, ver;
+    off_t flen;
+    struct stat st;
+    struct undup_hdr hdr;
+
+    n = snprintf(fname, sizeof fname, "%s/.undupfs/undup.dat", basedir);
+    if (n > sizeof fname) return -ENAMETOOLONG;
+    if ((fd = open(fname, O_RDWR)) == -1)
+        die("%s: %s\n", fname, strerror(errno));
+    if (fstat(fd, &st) == -1)
+        die("fstat: %s\n", strerror(errno));
+    flen = st.st_size;
+    n = read(fd, &hdr, sizeof hdr);
+    if (n != sizeof hdr)
+        die("unable to read header, got %d errno = %d (%s)\n",
+            n, errno, strerror(errno));
+    if (hdr.magic != UNDUPFS_MAGIC)
+        die("bad magic: 0x%08x\n", hdr.magic);
+    ver = hdr.version;
+    if (ver != 0x01)
+        die("%s: Unknown version: 0x%04x\n", hdr.version);
+    if (hdr.flags != 0)
+        die("%s: Unknown flags: 0x%04x\n", hdr.flags);
+    if (hdr.len != 0)
+        die("%s: corrupt len: %08x\n", hdr.len);
+
+    state = calloc(sizeof *state, 1);
+    if (!state) die("malloc: %s\n", strerror(errno));
+    state->basedir   = strdup(basedir);
+    state->blksz     = HASH_BLOCK;
+    state->blkshift  = 12;
+    state->fd        = fd;
+    state->bucketlen = flen;
+    state->hashblock = malloc(HASH_BLOCK);
+    state->hbpos     = 0;
+
+    ASSERT(1 << state->blkshift == state->blksz);
+
+    // if ver == 1
+    state->hashsz    = 32; // SHA256
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
-    return fuse_main(argc, argv, &undup_oper, NULL);
+    undup_init(argv[1]);
+    return fuse_main(argc-1, argv+1, &undup_oper, NULL);
 }
