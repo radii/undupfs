@@ -52,6 +52,7 @@ static void die(char *fmt, ...)
                                         __FILE__, __LINE__, #cond_); } while(0)
 
 static int o_verbose = 0;
+static FILE *f_debug = NULL;
 
 static void verbose(char *fmt, ...)
 {
@@ -62,6 +63,18 @@ static void verbose(char *fmt, ...)
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
+}
+
+static void debug(char *fmt, ...)
+{
+    va_list ap;
+
+    if (!f_debug) return;
+
+    va_start(ap, fmt);
+    vfprintf(f_debug, fmt, ap);
+    va_end(ap);
+    fflush(f_debug);
 }
 
 /*
@@ -106,13 +119,19 @@ static int undup_getattr(const char *path, struct stat *stbuf)
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
+    debug("getattr path=%s b=%s\n", path, b);
+
+    n = stat(b, stbuf);
+    if (n == -1)
+        return -errno;
+
+    if (S_ISDIR(stbuf->st_mode))
+        return 0;
+
     fd = open(b, O_RDONLY);
     if (fd == -1)
         return -errno;
 
-    n = fstat(fd, stbuf);
-    if (n == -1)
-        goto out;
     n = pread(fd, &hdr, sizeof(hdr), 0);
     if (n == -1)
         goto out;
@@ -141,6 +160,8 @@ static int undup_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    debug("readdir path=%s off=%lld b=%s\n", path, (long long)offset, b);
 
     dp = opendir(b);
     if (dp == NULL)
@@ -420,6 +441,10 @@ static int undup_init(const char *basedir)
     struct stat st;
     struct undup_hdr hdr;
 
+    char *f = getenv("UNDUP_DEBUG");
+    if (f) {
+        f_debug = fopen(f, "w");
+    }
     n = snprintf(fname, sizeof fname, "%s/.undupfs/undup.dat", basedir);
     if (n > sizeof fname) return -ENAMETOOLONG;
     if ((fd = open(fname, O_RDWR)) == -1)
