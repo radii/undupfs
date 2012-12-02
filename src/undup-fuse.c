@@ -459,8 +459,18 @@ static int undup_init(const char *basedir)
     return 0;
 }
 
+void usage(const char *cmd)
+{
+    die("Usage: %s -[vd] undupdir mountpoint\n", cmd);
+}
+
 int main(int argc, char **argv)
 {
-    undup_init(argv[1]);
-    return fuse_main(argc-1, argv+1, &undup_oper, NULL);
+    if (argc < 3)
+        usage(argv[0]);
+    undup_init(argv[argc-2]);
+    argv[argc-2] = argv[argc-1];
+    argv[argc-1] = NULL;
+    argc--;
+    return fuse_main(argc, argv, &undup_oper, state);
 }
