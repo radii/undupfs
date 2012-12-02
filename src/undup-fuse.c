@@ -259,7 +259,8 @@ static int undup_truncate(const char *path, off_t size)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
-    return n == -1 ? -errno : n;
+
+    return n == -1 ? -errno : 0;
 }
 
 static int undup_open(const char *path, struct fuse_file_info *fi)
