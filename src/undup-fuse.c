@@ -162,7 +162,7 @@ static int undup_opendir(const char *path, struct fuse_file_info *fi)
     dp = opendir(b);
     if (dp == NULL)
         return -EIO;
-    fi->fh = (void *)dp;
+    fi->fh = (long)(void *)dp;
 
     return 0;
 }
