@@ -149,6 +149,24 @@ out:
     return -err;
 }
 
+static int undup_opendir(const char *path, struct fuse_file_info *fi)
+{
+    char b[PATH_MAX+1];
+    int n;
+    DIR *dp;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    dp = opendir(b);
+    if (dp == NULL)
+        return -EIO;
+    fi->fh = (void *)dp;
+
+    return 0;
+}
+
 static int undup_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                          off_t offset, struct fuse_file_info *fi)
 {
@@ -161,11 +179,10 @@ static int undup_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    debug("readdir path=%s off=%lld b=%s\n", path, (long long)offset, b);
+    dp = (DIR *)(void *)fi->fh;
 
-    dp = opendir(b);
-    if (dp == NULL)
-        return -errno;
+    debug("readdir path=%s off=%lld b=%s dp=%p\n",
+          path, (long long)offset, b, dp);
 
     while ((de = readdir(dp)) != NULL) {
         struct stat st;
@@ -254,8 +271,38 @@ static int undup_open(const char *path, struct fuse_file_info *fi)
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    n = open(path, fi->flags);
+    n = open(b, fi->flags);
     return n == -1 ? -errno : 0;
+}
+
+static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+    char b[PATH_MAX+1];
+    int n, fd;
+    struct undup_hdr hdr;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    debug("create path=%s mode=0%o\n", path, mode);
+
+    fd = creat(b, mode);
+    if (fd == -1)
+        return -errno;
+
+    fi->fh = fd;
+
+    hdr.magic = UNDUPFS_MAGIC;
+    hdr.version = 1;
+    hdr.flags = 0;
+    hdr.len = 0;
+
+    n = write(fd, &hdr, sizeof(hdr));
+    if (n == -1)
+        return -errno;
+
+    return 0;
 }
 
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,
@@ -387,6 +434,8 @@ static int undup_write(const char *path, const char *buf, size_t size,
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
+    debug("write path=%s size=%d offset=%lld\n", path, (int)size,
+          (long long)offset);
     fd = open(b, O_RDWR);
     if (fd == -1)
         return -errno;
@@ -423,11 +472,13 @@ out:
 static struct fuse_operations undup_oper = {
     .getattr            = undup_getattr,
     .readdir            = undup_readdir,
+    .opendir            = undup_opendir,
     .mkdir              = undup_mkdir,
     .unlink             = undup_unlink,
     .rmdir              = undup_rmdir,
     .truncate           = undup_truncate,
     .open               = undup_open,
+    .create             = undup_create,
     .read               = undup_read,
     .write              = undup_write,
     .rename             = undup_rename,
@@ -480,6 +531,8 @@ static int undup_init(const char *basedir)
 
     // if ver == 1
     state->hashsz    = 32; // SHA256
+
+    debug("undup_init done, base=%s\n", state->basedir);
 
     return 0;
 }
