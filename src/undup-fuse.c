@@ -92,6 +92,8 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
     for (i = 0; ; i++) {
         blkpos = (1 + i) * (1 + nhash);
         n = pread(state->fd, buf, HASH_BLOCK, blkpos);
+        if (n == 0)
+            return 0;
         if (n == -1)
             return -1;
         if (n < HASH_BLOCK) {
@@ -312,8 +314,8 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     char b[PATH_MAX+1];
     char hash[HASH_MAX];
     int n, m, err, ret;
-    off_t hashpos, datapos;
-    int fd, datafd;
+    off_t hashpos, datapos = -1;
+    int fd, datafd = -1;
     int tot;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
@@ -337,6 +339,7 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
             goto out;
         }
         ret = lookup_hash(hash, &datafd, &datapos);
+        debug("loookup got %d %d %lld\n", ret, datafd, datapos);
         if (ret == -1)
             goto out;
         if (ret == 0) {
@@ -425,8 +428,8 @@ static int undup_write(const char *path, const char *buf, size_t size,
     char b[PATH_MAX+1];
     int i, n, fd, ret;
     char hash[HASH_MAX];
-    int datafd;
-    off_t datapos;
+    int datafd = -1;
+    off_t datapos = -1;
 
     ASSERT((size % HASH_BLOCK) == 0);
     ASSERT((offset % HASH_BLOCK) == 0);
@@ -446,17 +449,26 @@ static int undup_write(const char *path, const char *buf, size_t size,
         if (n > state->blksz) n = state->blksz;
         do_hash(hash, buf + i, n);
         ret = lookup_hash(hash, &datafd, &datapos);
+        debug("loookup_hash got %d %d %lld\n", ret, datafd, datapos);
         if (ret == -1)
             goto out;
         if (ret == 0) {
             // not found, write new block to bucket, write hash to stubfile
-            return write_block(fd, offset, buf + i, hash);
+            ret = write_block(fd, offset, buf + i, hash);
+            goto out;
         } else {
             off_t hashidx = offset >> state->blkshift;
             off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
 
             // found; optionally read+verify data, write hash
             n = pwrite(fd, hash, state->hashsz, hashpos);
+            if (n == -1)
+                goto out;
+            if (n < state->hashsz) {
+                errno = -EIO;
+                goto out;
+            }
+
         }
     }
 
