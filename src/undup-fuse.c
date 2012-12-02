@@ -545,7 +545,8 @@ static int undup_init(const char *basedir)
     // if ver == 1
     state->hashsz    = 32; // SHA256
 
-    debug("undup_init done, base=%s\n", state->basedir);
+    debug("undup_init done, base=%s len=%lld\n",
+          state->basedir, (long long)flen);
 
     return 0;
 }
