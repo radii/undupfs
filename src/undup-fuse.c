@@ -90,8 +90,9 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
     int nhash = HASH_BLOCK / hashsz;
 
     for (i = 0; ; i++) {
-        blkpos = (1 + i) * (1 + nhash);
+        blkpos = (off_t)HASH_BLOCK * ((1 + i) * nhash + 1);
         n = pread(state->fd, buf, HASH_BLOCK, blkpos);
+        debug("lookup_hash pos=%lld n=%d\n", (long long)blkpos, n);
         if (n == 0)
             return 0;
         if (n == -1)
