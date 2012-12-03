@@ -132,6 +132,24 @@ static int stub_update_len(struct stub *stub, off_t newlen)
     return 0;
 }
 
+static int stub_get_hash(struct stub *stub, off_t off, char *hash)
+{
+    off_t hashpos;
+    int n;
+   
+    hashpos = UNDUP_HDR_SIZE + (off >> state->blkshift) * state->hashsz;
+    n = pread(stub->fd, hash, state->hashsz, hashpos);
+    if (n == -1)
+        return -1;
+    if (n < state->hashsz) {
+        errno = EIO;
+        verbose("got %d bytes (needed %d) at %lld\n",
+                n, state->hashsz, (long long)hashpos);
+        return -1;
+    }
+    return 0;
+}
+
 /*
  * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
  * If not found, return 0.  On error, return -1 with errno set.
@@ -359,30 +377,27 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     char b[PATH_MAX+1];
     char hash[HASH_MAX];
     int n, m, err, ret;
-    off_t hashpos, datapos = -1;
-    int fd, datafd = -1;
+    off_t datapos = -1;
+    int datafd = -1;
     int tot;
+    struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    fd = open(b, O_RDONLY);
-    if (fd == -1)
+    stub = stub_open(b);
+    if (stub == NULL)
         return -errno;
+
+    debug("read off=%lld size=%d path=%s\n",
+          (long long)offset, (int)size, path);
 
     tot = 0;
     while (size > 0) {
-        hashpos = UNDUP_HDR_SIZE + (offset >> state->blkshift) * state->hashsz;
-        n = pread(fd, hash, state->hashsz, hashpos);
-        if (n == -1)
+        ret = stub_get_hash(stub, offset, hash);
+        if (ret == -1)
             goto out;
-        if (n < state->hashsz) {
-            errno = EIO;
-            verbose("got %d bytes (needed %d) at %lld (%s)\n",
-                    n, state->hashsz, (long long)hashpos, path);
-            goto out;
-        }
         ret = lookup_hash(hash, &datafd, &datapos);
         debug("loookup got %d %d %lld\n", ret, datafd, datapos);
         if (ret == -1)
@@ -408,7 +423,7 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     return tot;
 out:
     err = errno;
-    close(fd);
+    stub_close(stub);
     return -err;
 }
 
