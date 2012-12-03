@@ -13,6 +13,12 @@ struct undup_hdr {
     u64 len;
 };
 
+struct stub {
+    int fd;
+    off_t len;
+    struct undup_hdr hdr;
+};
+
 #define UNDUPFS_MAGIC 0x55444653
 #define UNDUPFS_VERSION 1
 

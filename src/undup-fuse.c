@@ -77,6 +77,61 @@ static void debug(char *fmt, ...)
     fflush(f_debug);
 }
 
+static struct stub *stub_open(const char *stubpath)
+{
+    struct stub *stub = calloc(sizeof *stub, 1);
+    int n;
+
+    if (!stub) {
+       errno = ENOMEM;
+       return NULL;
+    }
+
+    stub->fd = open(stubpath, O_RDWR);
+    if (stub->fd == -1)
+        goto err;
+    n = pread(stub->fd, &stub->hdr, sizeof(stub->hdr), 0);
+    if (n == -1)
+        goto err;
+    if (n < sizeof(stub->hdr)) {
+        errno = EIO;
+        goto err;
+    }
+
+    return stub;
+err:
+    free(stub);
+    return NULL;
+}
+
+static void stub_close(struct stub *stub)
+{
+    close(stub->fd);
+    free(stub);
+}
+
+static int stub_update_len(struct stub *stub, off_t newlen)
+{
+    int n;
+    u64 len;
+
+    debug("stub_update_len len=%lld newlen=%lld\n",
+          (long long)stub->hdr.len, (long long)newlen);
+
+    if (newlen <= stub->hdr.len)
+        return 0;
+
+    len = newlen;
+    n = pwrite(stub->fd, &len, sizeof(len), offsetof(struct undup_hdr, len));
+    if (n == -1)
+        return -1;
+    if (n < sizeof(len)) {
+        errno = EIO;
+        return -1;
+    }
+    return 0;
+}
+
 /*
  * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
  * If not found, return 0.  On error, return -1 with errno set.
@@ -115,8 +170,8 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
 static int undup_getattr(const char *path, struct stat *stbuf)
 {
     char b[PATH_MAX+1];
-    int n, err, fd;
-    struct undup_hdr hdr;
+    int n;
+    struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -131,25 +186,14 @@ static int undup_getattr(const char *path, struct stat *stbuf)
     if (S_ISDIR(stbuf->st_mode))
         return 0;
 
-    fd = open(b, O_RDONLY);
-    if (fd == -1)
+    stub = stub_open(b);
+    if (stub == NULL)
         return -errno;
 
-    n = pread(fd, &hdr, sizeof(hdr), 0);
-    if (n == -1)
-        goto out;
-    if (n < sizeof(hdr)) {
-        errno = -EIO;
-        goto out;
-    }
-    stbuf->st_size = hdr.len;
+    stbuf->st_size = stub->hdr.len;
 
-    close(fd);
+    stub_close(stub);
     return 0;
-out:
-    err = errno;
-    close(fd);
-    return -err;
 }
 
 static int undup_opendir(const char *path, struct fuse_file_info *fi)
@@ -381,7 +425,8 @@ out:
  *
  * returns 0 on success, or -errno on failure.
  */
-static int write_block(int stubfd, off_t blkoff, const char *blk, char *hash)
+static int write_block(struct stub *stub, off_t blkoff, const char *blk,
+                       int blklen, char *hash)
 {
     off_t hashidx = blkoff >> state->blkshift;
     off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
@@ -406,7 +451,7 @@ static int write_block(int stubfd, off_t blkoff, const char *blk, char *hash)
         state->hbpos = 0;
         state->bucketlen += state->blksz;
     }
-    n = pwrite(stubfd, hash, state->hashsz, hashpos);
+    n = pwrite(stub->fd, hash, state->hashsz, hashpos);
     if (n == -1)
         return -errno;
     if (n < state->hashsz)
@@ -427,10 +472,11 @@ static int undup_write(const char *path, const char *buf, size_t size,
                        off_t offset, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int i, n, fd, ret;
+    int i, n, ret;
     char hash[HASH_MAX];
     int datafd = -1;
     off_t datapos = -1;
+    struct stub *stub;
 
     ASSERT((size % HASH_BLOCK) == 0);
     ASSERT((offset % HASH_BLOCK) == 0);
@@ -441,8 +487,8 @@ static int undup_write(const char *path, const char *buf, size_t size,
 
     debug("write path=%s size=%d offset=%lld\n", path, (int)size,
           (long long)offset);
-    fd = open(b, O_RDWR);
-    if (fd == -1)
+    stub = stub_open(b);
+    if (!stub)
         return -errno;
 
     for (i = 0; i < size; i += state->blksz) {
@@ -455,31 +501,26 @@ static int undup_write(const char *path, const char *buf, size_t size,
             goto out;
         if (ret == 0) {
             // not found, write new block to bucket, write hash to stubfile
-            ret = write_block(fd, offset, buf + i, hash);
+            ret = write_block(stub, offset, buf + i, state->blksz, hash);
             goto out;
         } else {
             off_t hashidx = offset >> state->blkshift;
             off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
 
             // found; optionally read+verify data, write hash
-            n = pwrite(fd, hash, state->hashsz, hashpos);
+            n = pwrite(stub->fd, hash, state->hashsz, hashpos);
             if (n == -1)
                 goto out;
             if (n < state->hashsz) {
                 errno = -EIO;
                 goto out;
             }
-
         }
     }
 
-    //calculate hashes
-    //lookup hashes in bucket
-    //if present, write hashes
-    //if not present, write blocks to bucket and write hashes
-    //update length as necessary
-
 out:
+    stub_update_len(stub, offset + i);
+    stub_close(stub);
     return n == -1 ? -errno : n;
 }
 
