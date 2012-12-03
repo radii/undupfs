@@ -1,0 +1,18 @@
+#!/bin/sh
+
+set -e
+
+cmd=$0
+
+usage() {
+    echo "Usage: $cmd /path/to/dir" >&2
+    exit 1
+}
+
+[ -z "$1" ] && usage
+[ -d $1 ] || usage
+[ -d $1/.undupfs ] && usage
+
+mkdir $1/.undupfs || exit 1
+
+perl -e 'print pack("LSSQ@[4096]",0x55444653,1,0,0)' > $1/.undupfs/undup.dat
