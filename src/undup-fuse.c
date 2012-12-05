@@ -167,7 +167,7 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
         n = pread(state->fd, buf, HASH_BLOCK, blkpos);
         debug("lookup_hash pos=%lld n=%d\n", (long long)blkpos, n);
         if (n == 0)
-            return 0;
+            break;
         if (n == -1)
             return -1;
         if (n < HASH_BLOCK) {
@@ -180,6 +180,13 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
                 *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
                 return 1;
             }
+        }
+    }
+    for (j = 0; j < state->hbpos / hashsz; j++) {
+        if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
+            *fd = state->fd;
+            *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
+            return 1;
         }
     }
     return 0;
