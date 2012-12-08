@@ -388,15 +388,53 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     return 0;
 }
 
+static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
+{
+    int tot, n, m, ret;
+    off_t datapos = -1;
+    int datafd = -1;
+    char hash[HASH_MAX];
+
+    if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
+        size = stub->hdr.len - offset;
+    }
+
+    tot = 0;
+    while (size > 0) {
+        ret = stub_get_hash(stub, offset, hash);
+        if (ret == -1)
+            return -1;
+        ret = lookup_hash(hash, &datafd, &datapos);
+        debug("loookup got %d %d %lld\n", ret, datafd, datapos);
+        if (ret == -1)
+            return -1;
+        if (ret == 0) {
+            errno = EIO;
+            return -1;
+        }
+        m = size > state->blksz ? state->blksz : size;
+        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
+        n = pread(datafd, buf, m, datapos);
+        if (n == -1)
+            return -1;
+        if (n < m) {
+            errno = EIO;
+            return -1;
+        }
+        size -= n;
+        buf += n;
+        offset += n;
+        tot += n;
+    }
+
+    return tot;
+}
+
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    char hash[HASH_MAX];
-    int n, m, err, ret;
-    off_t datapos = -1;
-    int datafd = -1;
-    int tot;
+    int n, ret;
     struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
@@ -410,43 +448,9 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     debug("read off=%lld size=%d path=%s len=%lld\n",
           (long long)offset, (int)size, path, (long long)stub->hdr.len);
 
-    if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
-        size = stub->hdr.len - offset;
-    }
-
-    tot = 0;
-    while (size > 0) {
-        ret = stub_get_hash(stub, offset, hash);
-        if (ret == -1)
-            goto out;
-        ret = lookup_hash(hash, &datafd, &datapos);
-        debug("loookup got %d %d %lld\n", ret, datafd, datapos);
-        if (ret == -1)
-            goto out;
-        if (ret == 0) {
-            errno = EIO;
-            goto out;
-        }
-        m = size > state->blksz ? state->blksz : size;
-        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
-        n = pread(datafd, buf, m, datapos);
-        if (n == -1)
-            goto out;
-        if (n < m) {
-            errno = -EIO;
-            goto out;
-        }
-        size -= n;
-        buf += n;
-        offset += n;
-        tot += n;
-    }
-
-    return tot;
-out:
-    err = errno;
+    ret = stub_read(stub, buf, size, offset);
     stub_close(stub);
-    return -err;
+    return ret;
 }
 
 /*
@@ -517,6 +521,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
     int datafd = -1;
     off_t datapos = -1;
     struct stub *stub;
+    char *fillbuf = NULL;
 
     ASSERT((size % HASH_BLOCK) == 0);
     ASSERT((offset % HASH_BLOCK) == 0);
@@ -530,6 +535,22 @@ static int undup_write(const char *path, const char *buf, size_t size,
     stub = stub_open(b);
     if (!stub)
         return -errno;
+
+    if ((i = offset % state->blksz) > 0) {
+        fillbuf = malloc(state->blksz);
+        if (!fillbuf) {
+            ret = -ENOMEM;
+            goto out_close;
+        }
+        ret = stub_read(stub, fillbuf, state->blksz, offset - i);
+        if (ret == -1)
+            goto out_close;
+
+        n = state->blksz - i;
+        if (n > size) n = size;
+        memcpy(fillbuf + i, buf, n);
+        // XXX
+    }
 
     for (i = 0; i < size; i += state->blksz) {
         n = size - i;
@@ -552,7 +573,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
             if (ret == -1)
                 goto out;
             if (ret < state->hashsz) {
-                errno = -EIO;
+                errno = EIO;
                 goto out;
             }
         }
@@ -560,6 +581,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
 
 out:
     stub_update_len(stub, offset + i);
+out_close:
     stub_close(stub);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
