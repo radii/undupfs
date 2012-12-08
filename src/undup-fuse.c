@@ -424,6 +424,7 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
             goto out;
         }
         m = size > state->blksz ? state->blksz : size;
+        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
         n = pread(datafd, buf, m, datapos);
         if (n == -1)
             goto out;
@@ -543,10 +544,10 @@ static int undup_write(const char *path, const char *buf, size_t size,
             off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
 
             // found; optionally read+verify data, write hash
-            n = pwrite(stub->fd, hash, state->hashsz, hashpos);
-            if (n == -1)
+            ret = pwrite(stub->fd, hash, state->hashsz, hashpos);
+            if (ret == -1)
                 goto out;
-            if (n < state->hashsz) {
+            if (ret < state->hashsz) {
                 errno = -EIO;
                 goto out;
             }
@@ -556,7 +557,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
 out:
     stub_update_len(stub, offset + i);
     stub_close(stub);
-    return n == -1 ? -errno : n;
+    return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
 
 static struct fuse_operations undup_oper = {
