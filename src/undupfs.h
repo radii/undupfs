@@ -15,7 +15,6 @@ struct undup_hdr {
 
 struct stub {
     int fd;
-    off_t len;
     struct undup_hdr hdr;
 };
 

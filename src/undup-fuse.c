@@ -407,8 +407,12 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     if (stub == NULL)
         return -errno;
 
-    debug("read off=%lld size=%d path=%s\n",
-          (long long)offset, (int)size, path);
+    debug("read off=%lld size=%d path=%s len=%lld\n",
+          (long long)offset, (int)size, path, (long long)stub->hdr.len);
+
+    if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
+        size = stub->hdr.len - offset;
+    }
 
     tot = 0;
     while (size > 0) {
