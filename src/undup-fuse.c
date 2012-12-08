@@ -163,7 +163,7 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
     int nhash = HASH_BLOCK / hashsz;
 
     for (i = 0; ; i++) {
-        blkpos = (off_t)HASH_BLOCK * ((1 + i) * nhash + 1);
+        blkpos = (off_t)HASH_BLOCK * (i * nhash + 1);
         n = pread(state->fd, buf, HASH_BLOCK, blkpos);
         debug("lookup_hash pos=%lld n=%d\n", (long long)blkpos, n);
         if (n == 0)
@@ -175,6 +175,10 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
             return -1;
         }
         for (j = 0; j < nhash; j++) {
+            debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
+                  (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3],
+                  (u8)(buf+j*hashsz)[0], (u8)(buf+j*hashsz)[1],
+                  (u8)(buf+j*hashsz)[2], (u8)(buf+j*hashsz)[3]);
             if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
                 *fd = state->fd;
                 *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
@@ -183,7 +187,13 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
         }
     }
     for (j = 0; j < state->hbpos / hashsz; j++) {
-        if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
+        debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
+              (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3],
+              (u8)(state->hashblock+j*hashsz)[0],
+              (u8)(state->hashblock+j*hashsz)[1],
+              (u8)(state->hashblock+j*hashsz)[2],
+              (u8)(state->hashblock+j*hashsz)[3]);
+        if (!memcmp(state->hashblock + (j * hashsz), hash, hashsz)) {
             *fd = state->fd;
             *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
             return 1;
@@ -455,6 +465,9 @@ static int write_block(struct stub *stub, off_t blkoff, const char *blk,
     int n;
 
     ASSERT((blkoff & (state->blksz-1)) == 0);
+
+    debug("write_block off=%lld hash=%02x%02x%02x%02x\n",
+          (long long)blkoff, (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3], (u8)hash[4]);
 
     memcpy(state->hashblock + state->hbpos, hash, state->hashsz);
     state->hbpos += state->hashsz;
