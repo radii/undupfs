@@ -512,19 +512,49 @@ static void do_hash(void *hash, const char *buf, int n)
     SHA256_Final(hash, &ctx);
 }
 
+static int stub_write(struct stub *stub, const char *buf, size_t n, off_t off)
+{
+    char hash[HASH_MAX];
+    int ret = 0;
+    int datafd = -1;
+    off_t datapos = -1;
+
+    ASSERT(n == HASH_BLOCK);
+
+    do_hash(hash, buf, n);
+    ret = lookup_hash(hash, &datafd, &datapos);
+    debug("loookup_hash got %d %d %lld n=%d\n",
+          ret, datafd, datapos, (int)n);
+    if (ret == -1)
+        goto out;
+    if (ret == 0) {
+        // not found, write new block to bucket, write hash to stubfile
+        ret = write_block(stub, off, buf, state->blksz, hash);
+        goto out;
+    } else {
+        off_t hashidx = off >> state->blkshift;
+        off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
+
+        // found; optionally read+verify data, write hash
+        ret = pwrite(stub->fd, hash, state->hashsz, hashpos);
+        if (ret == -1)
+            goto out;
+        if (ret < state->hashsz) {
+            errno = EIO;
+            goto out;
+        }
+    }
+out:
+    return ret;
+}
+
 static int undup_write(const char *path, const char *buf, size_t size,
                        off_t offset, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
     int i, n, ret;
-    char hash[HASH_MAX];
-    int datafd = -1;
-    off_t datapos = -1;
     struct stub *stub;
     char *fillbuf = NULL;
-
-    ASSERT((size % HASH_BLOCK) == 0);
-    ASSERT((offset % HASH_BLOCK) == 0);
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -537,51 +567,61 @@ static int undup_write(const char *path, const char *buf, size_t size,
         return -errno;
 
     if ((i = offset % state->blksz) > 0) {
+        off_t blkoff = offset - i;
+
         fillbuf = malloc(state->blksz);
         if (!fillbuf) {
             ret = -ENOMEM;
             goto out_close;
         }
-        ret = stub_read(stub, fillbuf, state->blksz, offset - i);
+        ret = stub_read(stub, fillbuf, state->blksz, blkoff);
         if (ret == -1)
             goto out_close;
 
         n = state->blksz - i;
         if (n > size) n = size;
         memcpy(fillbuf + i, buf, n);
-        // XXX
+
+        ret = stub_write(stub, fillbuf, state->blksz, blkoff);
+        if (ret == -1) {
+            goto out_close;
+        }
+        offset = blkoff + state->blksz;
+        size -= n;
+        buf += n;
     }
 
-    for (i = 0; i < size; i += state->blksz) {
+    for (i = 0; i + state->blksz <= size; i += state->blksz) {
         n = size - i;
         if (n > state->blksz) n = state->blksz;
-        do_hash(hash, buf + i, n);
-        ret = lookup_hash(hash, &datafd, &datapos);
-        debug("loookup_hash got %d %d %lld\n", ret, datafd, datapos);
-        if (ret == -1)
-            goto out;
-        if (ret == 0) {
-            // not found, write new block to bucket, write hash to stubfile
-            ret = write_block(stub, offset, buf + i, state->blksz, hash);
-            goto out;
-        } else {
-            off_t hashidx = offset >> state->blkshift;
-            off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
-
-            // found; optionally read+verify data, write hash
-            ret = pwrite(stub->fd, hash, state->hashsz, hashpos);
-            if (ret == -1)
-                goto out;
-            if (ret < state->hashsz) {
-                errno = EIO;
-                goto out;
-            }
-        }
+        stub_write(stub, buf + i, n, offset + i);
     }
+    if (i < size) {
+        off_t blkoff = offset + i;
 
+        ASSERT(i < state->blksz);
+        if (!fillbuf) fillbuf = malloc(state->blksz);
+        if (!fillbuf) {
+            ret = -ENOMEM;
+            goto out;
+        }
+
+        ret = stub_read(stub, fillbuf, state->blksz, blkoff);
+        if (ret == -1) {
+            goto out;
+        }
+        n = size - i;
+        memcpy(fillbuf, buf + i, n);
+        ret = stub_write(stub, fillbuf, state->blksz, blkoff);
+        if (ret == -1) {
+            goto out;
+        }
+        i += n;
+    }
 out:
     stub_update_len(stub, offset + i);
 out_close:
+    free(fillbuf);
     stub_close(stub);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
