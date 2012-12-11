@@ -20,6 +20,7 @@
 #include <limits.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <sys/time.h>
 
 #include <openssl/sha.h>
 
@@ -48,6 +49,14 @@ static void die(char *fmt, ...)
     exit(1);
 }
 
+double rtc(void)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, 0);
+    return tv.tv_sec + tv.tv_usec / 1e6;
+}
+
 #define ASSERT(cond_) do { if (!(cond_)) die("%s:%d: ASSERT failed: %s\n", \
                                         __FILE__, __LINE__, #cond_); } while(0)
 
@@ -60,6 +69,7 @@ static void verbose(char *fmt, ...)
 
     if (!o_verbose) return;
 
+    fprintf(f_debug, "[%9.3f] ", rtc());
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
@@ -71,6 +81,7 @@ static void debug(char *fmt, ...)
 
     if (!f_debug) return;
 
+    fprintf(f_debug, "[%9.3f] ", rtc());
     va_start(ap, fmt);
     vfprintf(f_debug, fmt, ap);
     va_end(ap);
