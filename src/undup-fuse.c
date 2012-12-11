@@ -231,6 +231,37 @@ static int undup_getattr(const char *path, struct stat *stbuf)
     return 0;
 }
 
+static int undup_chown(const char *path, uid_t uid, gid_t gid)
+{
+    char b[PATH_MAX+1];
+    int n;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    debug("chown path=%s b=%s uid=%d gid=%d\n", path, b, uid, gid);
+
+    n = chown(b, uid, gid);
+    return n < 0 ? -errno : 0;
+}
+
+static int undup_chmod(const char *path, mode_t mode)
+{
+    char b[PATH_MAX+1];
+    int n;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    debug("chmod path=%s b=%s mode=0%o\n", path, b, mode);
+
+    n = chmod(b, mode);
+
+    return n < 0 ? -errno : 0;
+}
+
 static int undup_opendir(const char *path, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
@@ -291,6 +322,8 @@ static int undup_mkdir(const char *path, mode_t mode)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    n = mkdir(b, mode);
     return n == -1 ? -errno : n;
 }
 
@@ -628,6 +661,8 @@ out_close:
 
 static struct fuse_operations undup_oper = {
     .getattr            = undup_getattr,
+    .chown              = undup_chown,
+    .chmod              = undup_chmod,
     .readdir            = undup_readdir,
     .opendir            = undup_opendir,
     .mkdir              = undup_mkdir,
