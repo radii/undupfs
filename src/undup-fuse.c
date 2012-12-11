@@ -449,7 +449,7 @@ static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
         if (ret == -1)
             return -1;
         ret = lookup_hash(hash, &datafd, &datapos);
-        debug("loookup got %d %d %lld\n", ret, datafd, datapos);
+        debug("lookup got %d %d %lld\n", ret, datafd, datapos);
         if (ret == -1)
             return -1;
         if (ret == 0) {
