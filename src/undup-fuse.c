@@ -346,6 +346,9 @@ static int undup_unlink(const char *path)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    n = unlink(b);
+
     return n == -1 ? -errno : n;
 }
 
