@@ -599,6 +599,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
     int i, n, ret;
     struct stub *stub;
     char *fillbuf = NULL;
+    size_t nwrite = 0;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -633,12 +634,14 @@ static int undup_write(const char *path, const char *buf, size_t size,
         offset = blkoff + state->blksz;
         size -= n;
         buf += n;
+        nwrite += n;
     }
 
     for (i = 0; i + state->blksz <= size; i += state->blksz) {
         n = size - i;
         if (n > state->blksz) n = state->blksz;
         stub_write(stub, buf + i, n, offset + i);
+        nwrite += n;
     }
     if (i < size) {
         off_t blkoff = offset + i;
@@ -660,10 +663,10 @@ static int undup_write(const char *path, const char *buf, size_t size,
         if (ret == -1) {
             goto out;
         }
-        i += n;
+        nwrite += n;
     }
 out:
-    stub_update_len(stub, offset + i);
+    stub_update_len(stub, offset + nwrite);
 out_close:
     free(fillbuf);
     stub_close(stub);
