@@ -1,0 +1,22 @@
+
+test() {
+    printf "%-60s " "${1// /_}_" | sed 's/ /./g; s/_/ /g'
+    test_cur="$1"
+}
+
+# called for individual tests in a t.* script
+pass() {
+    echo " ok"
+}
+
+# called when completing a t.* script successfully
+success() {
+    echo
+    test_nsuccess=$((test_nsuccess + 1))
+}
+
+# called when completing a t.* script with failures
+fail() {
+    echo "$1 failed"
+    test_nfail=$((test_nfail + 1))
+}

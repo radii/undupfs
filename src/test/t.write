@@ -1,0 +1,11 @@
+set -e
+
+test "write one block and read it back"
+printf '%4095d\n' 43 > $d/oneblock
+printf '%4095d\n' 43 | cmp -s - $d/oneblock
+pass
+
+test "write a short string and read it back"
+echo "hello world" > $tk
+echo "hello world" | cmp -s - $tk
+pass

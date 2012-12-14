@@ -334,6 +334,8 @@ static int undup_mkdir(const char *path, mode_t mode)
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
+    verbose("mkdir(%s, %d)\n", path, mode);
+
     n = mkdir(b, mode);
     return n == -1 ? -errno : n;
 }
@@ -346,6 +348,8 @@ static int undup_unlink(const char *path)
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
+
+    verbose("unlink(%s)\n", path);
 
     n = unlink(b);
 
