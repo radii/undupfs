@@ -369,6 +369,56 @@ static int undup_rmdir(const char *path)
     return n == -1 ? -errno : n;
 }
 
+static int undup_readlink(const char *path, char *buf, size_t size)
+{
+    char b[PATH_MAX+1];
+    int n;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    /* XXX probably only handles relative links.  Need to handle
+     *  - absolute links
+     *  - correctly truncating ../../.. at root
+     */
+    debug("readlink(%s, %p, %d)\n", b, buf, (int)size);
+    n = readlink(b, buf, size);
+    return n == -1 ? -errno : n;
+}
+
+static int undup_symlink(const char *oldpath, const char *newpath)
+{
+    char b[PATH_MAX+1];
+    int n;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, newpath);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    debug("symlink(%s, %s)\n", oldpath, b);
+    n = symlink(oldpath, b);
+    return n == -1 ? -errno : n;
+}
+
+static int undup_link(const char *from, const char *to)
+{
+    char b[PATH_MAX+1], c[PATH_MAX+1];
+    int n;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, from);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    n = snprintf(c, PATH_MAX, "%s/%s", state->basedir, to);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    debug("link(%s, %s)\n", b, c);
+    n = link(b, c);
+    return n == -1 ? -errno : n;
+}
+
 static int undup_rename(const char *from, const char *to)
 {
     char b[PATH_MAX+1], c[PATH_MAX+1];
@@ -382,6 +432,7 @@ static int undup_rename(const char *from, const char *to)
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
+    debug("rename(%s, %s)\n", b, c);
     n = rename(b, c);
     return n == -1 ? -errno : n;
 }
@@ -709,6 +760,9 @@ static struct fuse_operations undup_oper = {
     .mkdir              = undup_mkdir,
     .unlink             = undup_unlink,
     .rmdir              = undup_rmdir,
+    .readlink           = undup_readlink,
+    .symlink            = undup_symlink,
+    .link               = undup_link,
     .truncate           = undup_truncate,
     .open               = undup_open,
     .create             = undup_create,
