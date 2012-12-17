@@ -88,15 +88,17 @@ static void debug(char *fmt, ...)
     fflush(f_debug);
 }
 
-static struct stub *stub_open(const char *stubpath)
+static struct stub *stub_open(const char *stubpath, int rdwr)
 {
     struct stub *stub = calloc(sizeof *stub, 1);
-    int n;
+    int n, e;
 
     if (!stub) {
        errno = ENOMEM;
        return NULL;
     }
+
+    ASSERT(rdwr == O_RDONLY || rdwr == O_RDWR);
 
     stub->fd = open(stubpath, O_RDWR);
     if (stub->fd == -1)
@@ -112,7 +114,10 @@ static struct stub *stub_open(const char *stubpath)
 
     return stub;
 err:
+    e = errno;
+    close(stub->fd);
     free(stub);
+    errno = e;
     return NULL;
 }
 
@@ -234,7 +239,7 @@ static int undup_getattr(const char *path, struct stat *stbuf)
     if (S_ISDIR(stbuf->st_mode))
         return 0;
 
-    stub = stub_open(b);
+    stub = stub_open(b, O_RDONLY);
     if (stub == NULL)
         return -errno;
 
@@ -548,7 +553,7 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    stub = stub_open(b);
+    stub = stub_open(b, O_RDONLY);
     if (stub == NULL)
         return -errno;
 
@@ -671,7 +676,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
 
     debug("write path=%s size=%d offset=%lld\n", path, (int)size,
           (long long)offset);
-    stub = stub_open(b);
+    stub = stub_open(b, O_RDWR);
     if (!stub)
         return -errno;
 
