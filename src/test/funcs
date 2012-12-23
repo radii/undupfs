@@ -77,7 +77,7 @@ _handleprevtest() {
             echo "FAIL"
             $((test_fail++)) ;;
         *)
-            echo "pass"
+            echo "ok"
             $((test_pass++)) ;;
         esac
     fi
