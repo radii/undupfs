@@ -121,11 +121,15 @@ err:
     return NULL;
 }
 
-static void stub_close(struct stub *stub)
+static int stub_close(struct stub *stub)
 {
+    int n, e;
+
     debug("stub_close(%p)\n", stub);
-    close(stub->fd);
+    n = close(stub->fd);
+    e = errno;
     free(stub);
+    return n == -1 ? -e : 0;
 }
 
 static int stub_update_len(struct stub *stub, off_t newlen)
@@ -457,14 +461,38 @@ static int undup_truncate(const char *path, off_t size)
 static int undup_open(const char *path, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int n;
+    int n, openmode;
+    struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    n = open(b, fi->flags);
-    return n == -1 ? -errno : 0;
+    debug("open(%s, flags=0x%x)\n", path, fi->flags);
+
+    if ((fi->flags & O_ACCMODE) == O_RDWR)
+        openmode = O_RDWR;
+    else if ((fi->flags & O_ACCMODE) == O_RDONLY)
+        openmode = O_RDONLY;
+    else
+        return -EINVAL;
+
+    stub = stub_open(b, openmode);
+    if (!stub)
+        return -errno;
+
+    fi->fh = (intptr_t)stub;
+    return 0;
+}
+
+static int undup_release(const char *path, struct fuse_file_info *fi)
+{
+    int n;
+    struct stub *stub = (struct stub *)fi->fh;
+
+    n = stub_close(stub);
+
+    return n < 0 ? -errno : n;
 }
 
 static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi)
@@ -472,6 +500,7 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     char b[PATH_MAX+1];
     int n, fd;
     struct undup_hdr hdr;
+    struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -483,8 +512,6 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     if (fd == -1)
         return -errno;
 
-    fi->fh = fd;
-
     hdr.magic = UNDUPFS_MAGIC;
     hdr.version = 1;
     hdr.flags = 0;
@@ -493,6 +520,14 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     n = write(fd, &hdr, sizeof(hdr));
     if (n == -1)
         return -errno;
+
+    close(n);
+    // XXX whatta hack, do a stub_create() or something
+    stub = stub_open(b, O_RDWR);
+    if (!stub)
+        return -errno;
+
+    fi->fh = (intptr_t)stub;
 
     return 0;
 }
@@ -506,6 +541,9 @@ static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
 
     debug("stub_read(%p, %d, %lld len=%lld)\n", stub,
             (int)size, (long long)offset, (long long)stub->hdr.len);
+
+    if (offset >= stub->hdr.len)
+        return 0;
 
     if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
         size = stub->hdr.len - offset;
@@ -553,15 +591,15 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    stub = stub_open(b, O_RDONLY);
-    if (stub == NULL)
-        return -errno;
+    stub = (struct stub *)fi->fh;
+    if (!stub)
+        return -EIO;
 
-    debug("read off=%lld size=%d path=%s len=%lld\n",
+    debug("undup_read off=%lld size=%d path=%s len=%lld\n",
           (long long)offset, (int)size, path, (long long)stub->hdr.len);
 
     ret = stub_read(stub, buf, size, offset);
-    stub_close(stub);
+    debug("undup_read return %d errno=%d\n", ret, errno);
     return ret;
 }
 
@@ -674,11 +712,11 @@ static int undup_write(const char *path, const char *buf, size_t size,
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    debug("write path=%s size=%d offset=%lld\n", path, (int)size,
-          (long long)offset);
-    stub = stub_open(b, O_RDWR);
+    stub = (struct stub *)fi->fh;
+    debug("undup_write path=%s size=%d offset=%lld fi=%p stub=%p\n", path,
+          (int)size, (long long)offset, fi, stub);
     if (!stub)
-        return -errno;
+        return -EIO;
 
     if ((i = offset % state->blksz) > 0) {
         off_t blkoff = offset - i;
@@ -734,10 +772,20 @@ static int undup_write(const char *path, const char *buf, size_t size,
         }
 
         ret = stub_read(stub, fillbuf, state->blksz, blkoff);
-        if (ret == -1) {
+        if (ret < 0) {
+            debug("stub_read failed! write bail.\n");
             goto out;
         }
+        if (ret < state->blksz) {
+            /*
+             * less than full buffer was read (probably 0 due to read-past-eof)
+             * so fill out the rest of the buffer with NUL.
+             */
+            memset(fillbuf + ret, state->blksz - ret, 0);
+        }
+
         n = size - i;
+        ASSERT(n < state->blksz);
         memcpy(fillbuf, buf + i, n);
         if (n < state->blksz)
             memset(fillbuf + n, 0, state->blksz - n);
@@ -752,7 +800,7 @@ out:
     stub_update_len(stub, orig_offset + nwrite);
 out_close:
     free(fillbuf);
-    stub_close(stub);
+    debug("undup_write return %d errno = %d\n", ret, errno);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
 
@@ -770,6 +818,7 @@ static struct fuse_operations undup_oper = {
     .link               = undup_link,
     .truncate           = undup_truncate,
     .open               = undup_open,
+    .release            = undup_release,
     .create             = undup_create,
     .read               = undup_read,
     .write              = undup_write,
