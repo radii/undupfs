@@ -1,0 +1,3 @@
+. $testdir/funcs
+d=$target
+tk=$tmpdir/$((++x))

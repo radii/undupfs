@@ -1,11 +1,25 @@
-set -e
+starttests t.write
 
 test "write one block and read it back"
-printf '%4095d\n' 43 > $d/oneblock
-printf '%4095d\n' 43 | cmp -s - $d/oneblock
-pass
+printf '%4095d\n' 43 > $d/oneblock || fail
+printf '%4095d\n' 43 | cmp -s - $d/oneblock || fail
 
 test "write a short string and read it back"
-echo "hello world" > $tk
-echo "hello world" | cmp -s - $tk
-pass
+echo "hello world" > $d/hello || fail
+echo "hello world" | cmp -s - $d/hello || fail
+
+test "write a block plus a little and read it back"
+printf "%4100d\n" 44 > $d/oneplus || fail
+printf "%4100d\n" 44 | cmp -s - $d/oneplus || fail
+
+test "write a block, close it, append a block"
+printf "%4095d\n" 32 > $d/appendblock || fail
+printf "%4095d\n" 35 >> $d/appendblock || fail
+printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/appendblock || fail
+
+test "write a block, close it, append a short string"
+printf "%4095d\n" 12 > $d/appendshort || fail
+printf "%100d\n" 13 >> $d/appendshort || fail
+printf "$4095d\n%100d\n" 12 13 | cmp -s - $d/appendshort || fail
+
+endtests t.foo
