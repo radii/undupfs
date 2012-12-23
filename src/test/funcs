@@ -50,14 +50,17 @@ finish() {
 win() {
     echo
     r=$(cat $result)
-    [ -z "$r" ] && r=1
-    test_nsuccess=$((test_nsuccess + 1))
+    [ -z "$r" ] && r=0
+    test_nsuccess=$((test_nsuccess + r))
 }
 
 # called from runtest.sh when completing a t.* script with failures
 lose() {
     echo "failed $1"
-    test_nfail=$((test_nfail + 1))
+    test_nfail=$((test_nfail + $2))
+    r=$(cat $result)
+    [ -z "$r" ] && r=0
+    test_nsuccess=$((test_nsuccess + r))
 }
 
 # called from t.foo once at startup
@@ -74,11 +77,13 @@ _handleprevtest() {
     if [ ! -z "$test_cur" ]; then
         case "$test_status" in
         fail)
+            : $((test_fail++))
             echo "FAIL"
-            $((test_fail++)) ;;
+            ;;
         *)
+            : $((test_pass++))
             echo "ok"
-            $((test_pass++)) ;;
+            ;;
         esac
     fi
 }

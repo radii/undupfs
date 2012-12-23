@@ -20,8 +20,7 @@ for s in $testdir/t.*; do
     export result=$r
     out=$tmpdir/out.$$.$t
     echo "=== $t ==="
-    bash -c ". $testdir/setup; . $s" 2>$out 99>$r && win $t || lose $t $?
-    lose $t $?
+    bash -c "exec 99>$r; . $testdir/setup; . $s" 2>$out && win $t || lose $t $?
 done
 
 finish
