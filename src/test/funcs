@@ -8,19 +8,43 @@
 #       test "another description"
 #          testcmd || fail
 #       endtests t.foo
-#     if t.foo passed: success t.foo <number of passes>
+#     if t.foo passed: win t.foo <number of passes>
 #     else t.foo failed: lose t.foo <number of fails>
 #       # from t.bar
 #       starttests t.bar
 #       test "yet another description"
 #       endtests t.bar
-#     if t.bar passed: success t.bar <number of passes>
+#     if t.bar passed: win t.bar <number of passes>
 #     else t.bar failed: lose t.bar <number of fails>
 #   finish
 #
 # Note that test() is stateful, it tracks what test is in progress and
 # manages stdout/stderr.  Each t.foo is run in a separate shell, with
 # several useful environment variables set and many functions accessible.
+
+# called from runtest.sh before running any tests
+# usage: begin
+begin() {
+    test_nsuccess=0
+    test_nfail=0
+
+    echo
+    echo "   Running tests in $target from $testdir at `date`"
+    echo
+}
+
+# called from runtest.sh when done running tests
+# usage: at end of t.foo, call "finish"
+finish() {
+    echo
+    echo "   pass: $test_nsuccess fail: $test_nfail"
+    echo
+    if [[ $test_nfail -gt 0 ]]; then
+        exit 1
+    else
+        exit 0
+    fi
+}
 
 # called from runtest.sh when completing a t.* script successfully
 win() {
@@ -80,28 +104,4 @@ endtests() {
     _handleprevtest
     printf '%d\n' $test_pass >&99
     exit $test_fail
-}
-
-# called from runtest.sh before running any tests
-# usage: begin
-begin() {
-    test_nsuccess=0
-    test_nfail=0
-
-    echo
-    echo "   Running tests in $target from $testdir at `date`"
-    echo
-}
-
-# called from runtest.sh when done running tests
-# usage: at end of t.foo, call "finish"
-finish() {
-    echo
-    echo "   pass: $test_nsuccess fail: $test_nfail"
-    echo
-    if [[ $test_nfail -gt 0 ]]; then
-        exit 1
-    else
-        exit 0
-    fi
 }
