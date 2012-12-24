@@ -140,9 +140,6 @@ static int stub_update_len(struct stub *stub, off_t newlen)
     debug("stub_update_len len=%lld newlen=%lld\n",
           (long long)stub->hdr.len, (long long)newlen);
 
-    if (newlen <= stub->hdr.len)
-        return 0;
-
     len = newlen;
     n = pwrite(stub->fd, &len, sizeof(len), offsetof(struct undup_hdr, len));
     if (n == -1)
