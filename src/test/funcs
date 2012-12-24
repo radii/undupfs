@@ -36,7 +36,6 @@ begin() {
 # called from runtest.sh when done running tests
 # usage: at end of t.foo, call "finish"
 finish() {
-    echo
     echo "   pass: $test_nsuccess fail: $test_nfail"
     echo
     if [[ $test_nfail -gt 0 ]]; then
@@ -48,6 +47,7 @@ finish() {
 
 # called from runtest.sh when completing a t.* script successfully
 win() {
+    echo "passed $1"
     echo
     r=$(cat $result)
     [ -z "$r" ] && r=0
@@ -57,6 +57,7 @@ win() {
 # called from runtest.sh when completing a t.* script with failures
 lose() {
     echo "failed $1"
+    echo
     test_nfail=$((test_nfail + $2))
     r=$(cat $result)
     [ -z "$r" ] && r=0
