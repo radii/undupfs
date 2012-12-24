@@ -20,6 +20,6 @@ printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/appendblock || fail
 test "write a block, close it, append a short string"
 printf "%4095d\n" 12 > $d/appendshort || fail
 printf "%100d\n" 13 >> $d/appendshort || fail
-printf "$4095d\n%100d\n" 12 13 | cmp -s - $d/appendshort || fail
+printf "%4095d\n%100d\n" 12 13 | cmp -s - $d/appendshort || fail
 
 endtests t.foo
