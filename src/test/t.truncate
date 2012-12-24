@@ -1,0 +1,8 @@
+starttests t.truncate
+
+test "rewrite a file to shorter and read it back"
+printf '%400d\n' 12 > $d/trunc || fail
+printf '%100d\n' 13 > $d/trunc || fail
+printf '%100d\n' 13 | cmp -s - $d/trunc || fail
+
+endtests t.truncate
