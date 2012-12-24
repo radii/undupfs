@@ -98,7 +98,7 @@ static struct stub *stub_open(const char *stubpath, int rdwr)
        return NULL;
     }
 
-    ASSERT(rdwr == O_RDONLY || rdwr == O_RDWR);
+    ASSERT(rdwr == O_RDONLY || rdwr == O_RDWR || rdwr == O_WRONLY);
 
     stub->fd = open(stubpath, O_RDWR);
     if (stub->fd == -1)
@@ -474,8 +474,12 @@ static int undup_open(const char *path, struct fuse_file_info *fi)
         openmode = O_RDWR;
     else if ((fi->flags & O_ACCMODE) == O_RDONLY)
         openmode = O_RDONLY;
-    else
+    else if ((fi->flags & O_ACCMODE) == O_WRONLY)
+        openmode = O_WRONLY;
+    else {
+        debug("open failing with flags 0x%x\n", fi->flags);
         return -EINVAL;
+    }
 
     stub = stub_open(b, openmode);
     if (!stub)
