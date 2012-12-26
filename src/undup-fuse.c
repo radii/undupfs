@@ -221,6 +221,54 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
     return 0;
 }
 
+static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
+{
+    int tot, n, m, ret;
+    off_t datapos = -1;
+    int datafd = -1;
+    char hash[HASH_MAX];
+
+    debug("stub_read(%p, %d, %lld len=%lld)\n", stub,
+            (int)size, (long long)offset, (long long)stub->hdr.len);
+
+    if (offset >= stub->hdr.len)
+        return 0;
+
+    if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
+        size = stub->hdr.len - offset;
+    }
+
+    tot = 0;
+    while (size > 0) {
+        ret = stub_get_hash(stub, offset, hash);
+        if (ret == -1)
+            return -1;
+        ret = lookup_hash(hash, &datafd, &datapos);
+        debug("lookup got %d %d %lld\n", ret, datafd, datapos);
+        if (ret == -1)
+            return -1;
+        if (ret == 0) {
+            errno = EIO;
+            return -1;
+        }
+        m = size > state->blksz ? state->blksz : size;
+        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
+        n = pread(datafd, buf, m, datapos);
+        if (n == -1)
+            return -1;
+        if (n < m) {
+            errno = EIO;
+            return -1;
+        }
+        size -= n;
+        buf += n;
+        offset += n;
+        tot += n;
+    }
+
+    return tot;
+}
+
 static int undup_getattr(const char *path, struct stat *stbuf)
 {
     char b[PATH_MAX+1];
@@ -531,54 +579,6 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     fi->fh = (intptr_t)stub;
 
     return 0;
-}
-
-static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
-{
-    int tot, n, m, ret;
-    off_t datapos = -1;
-    int datafd = -1;
-    char hash[HASH_MAX];
-
-    debug("stub_read(%p, %d, %lld len=%lld)\n", stub,
-            (int)size, (long long)offset, (long long)stub->hdr.len);
-
-    if (offset >= stub->hdr.len)
-        return 0;
-
-    if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
-        size = stub->hdr.len - offset;
-    }
-
-    tot = 0;
-    while (size > 0) {
-        ret = stub_get_hash(stub, offset, hash);
-        if (ret == -1)
-            return -1;
-        ret = lookup_hash(hash, &datafd, &datapos);
-        debug("lookup got %d %d %lld\n", ret, datafd, datapos);
-        if (ret == -1)
-            return -1;
-        if (ret == 0) {
-            errno = EIO;
-            return -1;
-        }
-        m = size > state->blksz ? state->blksz : size;
-        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
-        n = pread(datafd, buf, m, datapos);
-        if (n == -1)
-            return -1;
-        if (n < m) {
-            errno = EIO;
-            return -1;
-        }
-        size -= n;
-        buf += n;
-        offset += n;
-        tot += n;
-    }
-
-    return tot;
 }
 
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,
