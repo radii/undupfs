@@ -269,6 +269,22 @@ static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
     return tot;
 }
 
+/*
+ * Validate the bucket described by STATE.  This includes adjusting fields
+ * such as state->bucketlen so that future blocks go to the right place,
+ * but it does not validate block hashes in the bucket.
+ *
+ * The following system is used to recover from a partially written tail
+ * segment.
+ *  - for each data block in the segment, check if it is all 0s.
+ *  - if nonzero, hash it and store the hash in state->hashblock.
+ *  - adjust bucketlen and hbpos to the last non-zero data block.
+ */
+static int bucket_validate(struct undup_state *state)
+{
+    return 0;
+}
+
 static int undup_getattr(const char *path, struct stat *stbuf)
 {
     char b[PATH_MAX+1];
@@ -873,6 +889,8 @@ static int undup_init(const char *basedir)
 
     // if ver == 1
     state->hashsz    = 32; // SHA256
+
+    bucket_validate(state);
 
     debug("undup_init done, base=%s len=%lld\n",
           state->basedir, (long long)flen);

@@ -34,4 +34,17 @@ test "write 100 blocks, read them back"
 perl -e 'foreach(1..100){printf("%4095d\n",$_)}' > $d/hundred || fail
 perl -e 'foreach(1..100){printf("%4095d\n",$_)}' | cmp -s - $d/hundred || fail
 
+test "write 1000 blocks, read them back"
+perl -e 'foreach(1..1000){printf("%4095d\n",$_)}' > $d/thousand || fail
+perl -e 'foreach(1..1000){printf("%4095d\n",$_)}' | cmp -s - $d/thousand || fail
+
+test "write two files with same contents, modify one"
+printf "%1023d\n" 42 > $d/a || fail
+printf "%1023d\n" 42 > $d/b || fail
+cmp -s $d/a $d/b || fail
+printf "%1023d\n" 32 > $d/b || fail
+cmp -s $d/a $d/b && fail
+printf "%1023d\n" 42 | cmp -s - $d/a || fail
+printf "%1023d\n" 32 | cmp -s - $d/b || fail
+
 endtests t.foo
