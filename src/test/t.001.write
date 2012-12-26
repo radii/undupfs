@@ -30,4 +30,8 @@ printf "%4095d\n" 12 > $d/appendshort || fail
 printf "%100d\n" 13 >> $d/appendshort || fail
 printf "%4095d\n%100d\n" 12 13 | cmp -s - $d/appendshort || fail
 
+test "write 100 blocks, read them back"
+perl -e 'foreach(1..100){printf("%4095d\n",$_)}' > $d/hundred || fail
+perl -e 'foreach(1..100){printf("%4095d\n",$_)}' | cmp -s - $d/hundred || fail
+
 endtests t.foo
