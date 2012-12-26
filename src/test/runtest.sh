@@ -3,7 +3,7 @@
 # set -x
 
 target=$1
-testdir=`dirname $0`
+testdir=$(cd $(dirname $0); pwd -P)
 tmpdir=`mktemp -d`
 
 export target testdir tmpdir

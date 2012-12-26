@@ -29,7 +29,8 @@ begin() {
     test_nfail=0
 
     echo
-    echo "   Running tests in $target from $testdir at `date`"
+    echo "   Running tests in $target from $testdir"
+    echo "   at `date`"
     echo
 }
 
