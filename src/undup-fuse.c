@@ -135,16 +135,16 @@ static int stub_close(struct stub *stub)
 static int stub_update_len(struct stub *stub, off_t newlen)
 {
     int n;
-    u64 len;
 
     debug("stub_update_len len=%lld newlen=%lld\n",
           (long long)stub->hdr.len, (long long)newlen);
 
-    len = newlen;
-    n = pwrite(stub->fd, &len, sizeof(len), offsetof(struct undup_hdr, len));
+    stub->hdr.len = newlen;
+    n = pwrite(stub->fd, &stub->hdr.len, sizeof(stub->hdr.len),
+               offsetof(struct undup_hdr, len));
     if (n == -1)
         return -1;
-    if (n < sizeof(len)) {
+    if (n < sizeof(stub->hdr.len)) {
         errno = EIO;
         return -1;
     }
@@ -801,7 +801,7 @@ out:
     stub_update_len(stub, orig_offset + nwrite);
 out_close:
     free(fillbuf);
-    debug("undup_write return %d errno = %d\n", ret, errno);
+    debug("undup_write ret=%d n=%d errno=%d\n", ret, n, errno);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
 
