@@ -653,6 +653,7 @@ static int write_block(struct stub *stub, off_t blkoff, const char *blk,
     if (n < state->blksz)
         return -EIO;
     state->bucketlen += state->blksz;
+    ASSERT(state->hbpos <= state->blksz);
     if (state->hbpos == state->blksz) {
         n = pwrite(state->fd, state->hashblock, state->blksz, state->bucketlen);
         if (n == -1)
