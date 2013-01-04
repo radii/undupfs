@@ -6,6 +6,7 @@ target=$1
 testdir=$(cd $(dirname $0); pwd -P)
 tmpdir=`mktemp -d`
 
+[ -d "$target" ] || { echo "No such directory '$target'" >&2; exit 1; }
 export target testdir tmpdir
 
 trap "rm -rf $tmpdir" QUIT EXIT INT HUP
