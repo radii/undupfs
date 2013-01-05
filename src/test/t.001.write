@@ -21,8 +21,7 @@ test "rewrite a 2-block file"
 printf "%4095d\n" 32 > $d/rewriteblock || fail
 printf "%4095d\n" 35 >> $d/rewriteblock || fail
 printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/rewriteblock || fail
-printf "%4095d\n" 42 > $d/rewriteblock || fail
-printf "%4095d\n" 45 >> $d/rewriteblock || fail
+(printf "%4095d\n" 42; printf "%4095d\n" 45) > $d/rewriteblock || fail
 printf "%4095d\n%4095d\n" 42 45 | cmp -s - $d/rewriteblock || fail
 
 test "write a block, close it, append a short string"
