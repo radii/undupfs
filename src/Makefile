@@ -8,6 +8,9 @@ all: $(targets)
 undup-fuse: undup-fuse.o util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) undup-fuse.o util.o -o undup-fuse
 
+bloom: bloom.c util.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -DMAIN -o bloom bloom.c util.o
+
 clean:
 	rm -f *.o
 	rm -f $(targets)
