@@ -32,6 +32,14 @@
  * Key presence is tested by calling bloom_test().
  */
 
+static int log2_ceil(int x)
+{
+    int r = 1;
+    while (1 << r < x)
+        r++;
+    return r;
+}
+
 /*
  * Set up a cohort of Bloom filters.  bloom_setup initializes shared state and
  * validates the settings.
@@ -51,6 +59,7 @@ struct bloom_params *bloom_setup(int sz, int nb, int kl)
     ASSERT(p->bytesize * 8 >= sz);
     p->nbit = nb;
     p->keylen = kl;
+    p->bitperf = log2_ceil(sz);
 
     return p;
 }
@@ -118,12 +127,32 @@ static u32 get_bits(u8 *a, int pos, int nbit)
     return (r >> shift) & mask;
 }
 
+/*
+ * Sets the Xth bit of B.  Returns the previous value of the bit.
+ */
+static int set_bit(u8 *b, int x)
+{
+    int i = x / 8;
+    int j = 7 - x % 8;
+    int m = 1 << j;
+    int r = (b[i] & m) != 0;
+
+    b[i] |= m;
+    return r;
+}
+
+/* Insert KEY into filter B.
+ *
+ * Returns 1 if the key collided with existing entries (that is, all of the bits
+ * set due to B were already set).  Returns 0 if B caused a bit to be set.
+ */
 int bloom_insert(struct bloom_params *p, u8 *b, u8 *key)
 {
-    int i;
+    int i, m = 1;
 
     for (i=0; i<p->nbit; i++) {
-        int b = get_bits(key, i * p->bitperf, p->bitperf);
+        int x = get_bits(key, i * p->bitperf, p->bitperf) % p->size;
+        m &= set_bit(b, x);
     }
     return 0;
 }
@@ -156,6 +185,26 @@ int main(void)
         ASSERT(get_bits(a, 2, 32) == 0x48d15599); ntest++;
         printf(" passed %d tests\n", ntest);
     }
+    printf("testing set_bit ..."); fflush(stdout);
+    {
+        int ntest = 0;
+        u8 a[10] = { 0 };
+
+        ASSERT(set_bit(a, 0) == 0);
+        ASSERT(a[0] == 0x80); ntest++;
+        ASSERT(set_bit(a, 1) == 0);
+        ASSERT(a[0] == 0xc0); ntest++;
+        ASSERT(set_bit(a, 7) == 0);
+        ASSERT(a[0] == 0xc1); ntest++;
+        ASSERT(set_bit(a, 8) == 0);
+        ASSERT(a[1] == 0x80); ntest++;
+        ASSERT(set_bit(a, 8) == 1); ntest++;
+        ASSERT(set_bit(a, 20) == 0);
+        ASSERT(a[2] == 0x08); ntest++;
+
+        printf(" passed %d test\n", ntest);
+    }
+
     return 0;
 }
 #endif
