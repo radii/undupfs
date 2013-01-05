@@ -25,6 +25,7 @@
 #include <openssl/sha.h>
 
 #include "undupfs.h"
+#include "shared.h"
 
 struct undup_state {
     char *basedir;
@@ -39,54 +40,8 @@ struct undup_state {
 
 static struct undup_state *state;
 
-static void die(char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    exit(1);
-}
-
-double rtc(void)
-{
-    struct timeval tv;
-
-    gettimeofday(&tv, 0);
-    return tv.tv_sec + tv.tv_usec / 1e6;
-}
-
-#define ASSERT(cond_) do { if (!(cond_)) die("%s:%d: ASSERT failed: %s\n", \
-                                        __FILE__, __LINE__, #cond_); } while(0)
-
-static int o_verbose = 0;
-static FILE *f_debug = NULL;
-
-static void verbose(char *fmt, ...)
-{
-    va_list ap;
-
-    if (!o_verbose) return;
-
-    fprintf(f_debug, "[%9.3f] ", rtc());
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
-static void debug(char *fmt, ...)
-{
-    va_list ap;
-
-    if (!f_debug) return;
-
-    fprintf(f_debug, "[%9.3f] ", rtc());
-    va_start(ap, fmt);
-    vfprintf(f_debug, fmt, ap);
-    va_end(ap);
-    fflush(f_debug);
-}
+int o_verbose = 0;
+FILE *f_debug = NULL;
 
 static struct stub *stub_open(const char *stubpath, int rdwr)
 {

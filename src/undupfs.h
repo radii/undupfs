@@ -1,10 +1,7 @@
 #ifndef UNDUPFS_H_
 #define UNDUPFS_H_
 
-typedef unsigned char      u8;
-typedef unsigned short     u16;
-typedef unsigned int       u32;
-typedef unsigned long long u64;
+#include "shared.h"
 
 struct undup_hdr {
     u32 magic;
