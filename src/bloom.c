@@ -154,7 +154,7 @@ int bloom_insert(struct bloom_params *p, u8 *b, u8 *key)
         int x = get_bits(key, i * p->bitperf, p->bitperf) % p->size;
         m &= set_bit(b, x);
     }
-    return 0;
+    return m;
 }
 
 int bloom_test(struct bloom_params *p, u8 *b, u8 *key)
