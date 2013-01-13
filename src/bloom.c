@@ -127,6 +127,11 @@ static u32 get_bits(u8 *a, int pos, int nbit)
     return (r >> shift) & mask;
 }
 
+static u32 get_bit(u8 *a, int pos)
+{
+    return 1 & (a[pos / 8] >> (7 - pos % 8));
+}
+
 /*
  * Sets the Xth bit of B.  Returns the previous value of the bit.
  */
@@ -183,8 +188,48 @@ int main(void)
         ASSERT(get_bits(a, 0, 32) == 0x12345566); ntest++;
         ASSERT(get_bits(a, 1, 32) == 0x2468aacc); ntest++;
         ASSERT(get_bits(a, 2, 32) == 0x48d15599); ntest++;
+
+        u8 b[] = { 0xff, 0x18, 0x33 };
+        ASSERT(get_bits(b,  0, 1) == 1); ntest++;
+        ASSERT(get_bits(b,  1, 1) == 1); ntest++;
+        ASSERT(get_bits(b,  2, 1) == 1); ntest++;
+        ASSERT(get_bits(b,  3, 1) == 1); ntest++;
+        ASSERT(get_bits(b,  7, 1) == 1); ntest++;
+        ASSERT(get_bits(b,  8, 1) == 0); ntest++;
+        ASSERT(get_bits(b,  9, 1) == 0); ntest++;
+        ASSERT(get_bits(b, 10, 1) == 0); ntest++;
+        ASSERT(get_bits(b, 11, 1) == 1); ntest++;
+        ASSERT(get_bits(b, 12, 1) == 1); ntest++;
+        ASSERT(get_bits(b, 13, 1) == 0); ntest++;
+        ASSERT(get_bits(b, 16, 1) == 0); ntest++;
+        ASSERT(get_bits(b, 17, 1) == 0); ntest++;
+        ASSERT(get_bits(b, 18, 1) == 1); ntest++;
+        ASSERT(get_bits(b, 19, 1) == 1); ntest++;
         printf(" passed %d tests\n", ntest);
     }
+
+    printf("testing get_bit ..."); fflush(stdout);
+    {
+        int ntest = 0;
+        u8 a[] = { 0xff, 0x18, 0x33 };
+        ASSERT(get_bit(a,  0) == 1); ntest++;
+        ASSERT(get_bit(a,  1) == 1); ntest++;
+        ASSERT(get_bit(a,  2) == 1); ntest++;
+        ASSERT(get_bit(a,  3) == 1); ntest++;
+        ASSERT(get_bit(a,  7) == 1); ntest++;
+        ASSERT(get_bit(a,  8) == 0); ntest++;
+        ASSERT(get_bit(a,  9) == 0); ntest++;
+        ASSERT(get_bit(a, 10) == 0); ntest++;
+        ASSERT(get_bit(a, 11) == 1); ntest++;
+        ASSERT(get_bit(a, 12) == 1); ntest++;
+        ASSERT(get_bit(a, 13) == 0); ntest++;
+        ASSERT(get_bit(a, 16) == 0); ntest++;
+        ASSERT(get_bit(a, 17) == 0); ntest++;
+        ASSERT(get_bit(a, 18) == 1); ntest++;
+        ASSERT(get_bit(a, 19) == 1); ntest++;
+        printf(" passed %d tests\n", ntest);
+    }
+
     printf("testing set_bit ..."); fflush(stdout);
     {
         int ntest = 0;
