@@ -148,13 +148,13 @@ static int set_bit(u8 *b, int x)
  */
 int bloom_insert(struct bloom_params *p, u8 *b, u8 *key)
 {
-    int i, m = 1;
+    int i, did_collide = 1;
 
     for (i=0; i<p->nbit; i++) {
         int x = get_bits(key, i * p->bitperf, p->bitperf) % p->size;
-        m &= set_bit(b, x);
+        did_collide &= set_bit(b, x);
     }
-    return m;
+    return did_collide;
 }
 
 int bloom_test(struct bloom_params *p, u8 *b, u8 *key)
