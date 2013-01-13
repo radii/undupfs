@@ -162,9 +162,20 @@ int bloom_insert(struct bloom_params *p, u8 *b, u8 *key)
     return did_collide;
 }
 
-int bloom_test(struct bloom_params *p, u8 *b, u8 *key)
+/* Check if KEY is present in filter B.
+ *
+ * Returns 1 if KEY may have been inserted (all of the bits set due to KEY are
+ * set).  Returns 0 if KEY was not inserted.
+ */
+int bloom_present(struct bloom_params *p, u8 *b, u8 *key)
 {
-    return 0;
+    int i;
+    for (i=0; i<p->nbit; i++) {
+        int x = get_bits(key, i * p->bitperf, p->bitperf) % p->size;
+        if (get_bit(b, x) == 0)
+            return 0;
+    }
+    return 1;
 }
 
 #ifdef MAIN
@@ -248,6 +259,10 @@ int main(void)
         ASSERT(a[2] == 0x08); ntest++;
 
         printf(" passed %d test\n", ntest);
+    }
+    printf("testing bloom_insert ..."); fflush(stdout);
+    {
+        int ntest = 0;
     }
 
     return 0;

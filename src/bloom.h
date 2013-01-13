@@ -17,6 +17,6 @@ void bloom_init(struct bloom_params *p, u8 *b);
 
 int bloom_insert(struct bloom_params *p, u8 *b, u8 *key);
 
-int bloom_test(struct bloom_params *p, u8 *b, u8 *key);
+int bloom_present(struct bloom_params *p, u8 *b, u8 *key);
 
 #endif /* BLOOM_H_ */
