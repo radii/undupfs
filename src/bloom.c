@@ -77,7 +77,7 @@ void bloom_init(struct bloom_params *p, u8 *b)
 
 /*
  * Extracts NBIT bits from bit array A starting at bit position POS.
- * Both bits an bytes are indexed big-endian:
+ * Both bits and bytes are indexed big-endian:
  *    \ bitindex|            11 1111
  *  val\        |0123 4567 8901 2345
  *  ------------+-------------------
