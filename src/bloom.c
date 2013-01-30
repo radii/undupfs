@@ -19,7 +19,7 @@
  * it's important that the parameters be stored separately from the bit array,
  * and there's no explicit linkage between them.
  *
- * The parameters are stroed in a `struct bloom_params` which is returned from
+ * The parameters are stored in a `struct bloom_params` which is returned from
  * bloom_setup().  Each filter bitarray is initialized by a call to bloom_init.
  *
  * Keys are assumed to be a hash output, and are assumed to be a random
