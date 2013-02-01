@@ -24,8 +24,8 @@
 
 #include <openssl/sha.h>
 
-#include "undupfs.h"
 #include "shared.h"
+#include "undupfs.h"
 
 struct undup_state {
     char *basedir;
