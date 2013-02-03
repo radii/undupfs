@@ -1,7 +1,7 @@
 /*
  * undup-fuse: a deduplicating filesystem using FUSE.
  *
- * Copyright (C) 2012 Andrew Isaacson <adi@hexapodia.org>
+ * Copyright (C) 2012-2013 Andrew Isaacson <adi@hexapodia.org>
  *
  * This program is free software, licensed under the terms of the GNU GPL
  * version 3.  See the file COPYING for more information.
