@@ -677,7 +677,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
                        off_t offset, struct fuse_file_info *fi)
 {
     char b[PATH_MAX+1];
-    int i, n, ret;
+    int i, n, ret = 0;
     struct stub *stub;
     char *fillbuf = NULL;
     size_t nwrite = 0;
