@@ -5,8 +5,8 @@ targets = undup-fuse
 
 all: $(targets)
 
-undup-fuse: undup-fuse.o util.o
-	$(CC) $(CFLAGS) $(LDFLAGS) undup-fuse.o util.o -o undup-fuse
+undup-fuse: undup-fuse.o util.o bloom.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
 bloom: bloom.c util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -DMAIN -o bloom bloom.c util.o

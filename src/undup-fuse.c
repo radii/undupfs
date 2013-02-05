@@ -26,6 +26,7 @@
 
 #include "shared.h"
 #include "undupfs.h"
+#include "bloom.h"
 
 struct undup_state {
     char *basedir;
@@ -36,6 +37,7 @@ struct undup_state {
     off_t bucketlen; // length of bucketfile
     char *hashblock; // in-progress block of hashes
     int hbpos;       // current position in hashblock
+    struct bloom_params *bloom;
 };
 
 static struct undup_state *state;
@@ -805,6 +807,8 @@ static int undup_init(const char *basedir)
     off_t flen;
     struct stat st;
     struct undup_hdr hdr;
+    int filtersz = 1024;
+    int bitcount = 7;
 
     char *f = getenv("UNDUP_DEBUG");
     if (f) {
@@ -845,6 +849,8 @@ static int undup_init(const char *basedir)
 
     // if ver == 1
     state->hashsz    = 32; // SHA256
+
+    state->bloom = bloom_setup(filtersz, bitcount, state->hashsz);
 
     bucket_validate(state);
 
