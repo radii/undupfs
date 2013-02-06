@@ -93,7 +93,7 @@ void bloom_init(struct bloom_params *p, u8 *b)
  * Values are returned right-justified, so if 4 bits valued 0010 are extracted,
  * the return value is 0x00000002.
  */
-static u32 get_bits(u8 *a, int pos, int nbit)
+static u32 get_bits(const u8 *a, int pos, int nbit)
 {
     u64 r = 0;
     int i;
@@ -127,7 +127,7 @@ static u32 get_bits(u8 *a, int pos, int nbit)
     return (r >> shift) & mask;
 }
 
-static u32 get_bit(u8 *a, int pos)
+static u32 get_bit(const u8 *a, int pos)
 {
     return 1 & (a[pos / 8] >> (7 - pos % 8));
 }
@@ -151,7 +151,7 @@ static int set_bit(u8 *b, int x)
  * Returns 1 if the key collided with existing entries (that is, all of the bits
  * set due to B were already set).  Returns 0 if B caused a bit to be set.
  */
-int bloom_insert(struct bloom_params *p, u8 *b, u8 *key)
+int bloom_insert(struct bloom_params *p, u8 *b, const u8 *key)
 {
     int i, did_collide = 1;
 
@@ -167,7 +167,7 @@ int bloom_insert(struct bloom_params *p, u8 *b, u8 *key)
  * Returns 1 if KEY may have been inserted (all of the bits set due to KEY are
  * set).  Returns 0 if KEY was not inserted.
  */
-int bloom_present(struct bloom_params *p, u8 *b, u8 *key)
+int bloom_present(struct bloom_params *p, const u8 *b, const u8 *key)
 {
     int i;
     for (i=0; i<p->nbit; i++) {

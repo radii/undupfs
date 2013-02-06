@@ -33,13 +33,13 @@ void bloom_init(struct bloom_params *p, u8 *b);
  * Returns 1 if the key collided with existing entries (that is, all of the bits
  * set due to B were already set).  Returns 0 if B caused a bit to be set.
  */
-int bloom_insert(struct bloom_params *p, u8 *b, u8 *key);
+int bloom_insert(struct bloom_params *p, u8 *b, const u8 *key);
 
 /* Check if KEY is present in filter B.
  *
  * Returns 1 if KEY may have been inserted (all of the bits set due to KEY are
  * set).  Returns 0 if KEY was not inserted.
  */
-int bloom_present(struct bloom_params *p, u8 *b, u8 *key);
+int bloom_present(struct bloom_params *p, const u8 *b, const u8 *key);
 
 #endif /* BLOOM_H_ */
