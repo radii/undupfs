@@ -144,6 +144,8 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
         if (i < state->nblooms &&
                 state->blooms[i] &&
                 !bloom_present(state->bloom, state->blooms[i], hash)) {
+            debug("%02x%02x%02x%02x bloom %d/%d miss\n",
+                  hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
             continue;
         }
 
@@ -182,7 +184,7 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
 
         for (j = 0; j < nhash; j++) {
             debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
-                  (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3],
+                  hash[0], hash[1], hash[2], hash[3],
                   (u8)(buf+j*hashsz)[0], (u8)(buf+j*hashsz)[1],
                   (u8)(buf+j*hashsz)[2], (u8)(buf+j*hashsz)[3]);
             if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
