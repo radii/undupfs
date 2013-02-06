@@ -108,7 +108,7 @@ static int stub_update_len(struct stub *stub, off_t newlen)
     return 0;
 }
 
-static int stub_get_hash(struct stub *stub, off_t off, char *hash)
+static int stub_get_hash(struct stub *stub, off_t off, u8 *hash)
 {
     off_t hashpos;
     int n;
@@ -130,7 +130,7 @@ static int stub_get_hash(struct stub *stub, off_t off, char *hash)
  * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
  * If not found, return 0.  On error, return -1 with errno set.
  */
-static int lookup_hash(const char *hash, int *fd, off_t *off)
+static int lookup_hash(const u8 *hash, int *fd, off_t *off)
 {
     int i, j, n;
     char buf[HASH_BLOCK];
@@ -178,12 +178,12 @@ static int lookup_hash(const char *hash, int *fd, off_t *off)
     return 0;
 }
 
-static int stub_read(struct stub *stub, char *buf, size_t size, off_t offset)
+static int stub_read(struct stub *stub, void *buf, size_t size, off_t offset)
 {
     int tot, n, m, ret;
     off_t datapos = -1;
     int datafd = -1;
-    char hash[HASH_MAX];
+    u8 hash[HASH_MAX];
 
     debug("stub_read(%p, %d, %lld len=%lld)\n", stub,
             (int)size, (long long)offset, (long long)stub->hdr.len);
@@ -590,8 +590,8 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
  *
  * returns 0 on success, or -errno on failure.
  */
-static int write_block(struct stub *stub, off_t blkoff, const char *blk,
-                       int blklen, char *hash)
+static int write_block(struct stub *stub, off_t blkoff, const u8 *blk,
+                       int blklen, u8 *hash)
 {
     off_t hashidx = blkoff >> state->blkshift;
     off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
@@ -600,7 +600,7 @@ static int write_block(struct stub *stub, off_t blkoff, const char *blk,
     ASSERT((blkoff & (state->blksz-1)) == 0);
 
     debug("write_block off=%lld hash=%02x%02x%02x%02x\n",
-          (long long)blkoff, (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3], (u8)hash[4]);
+          (long long)blkoff, hash[0], hash[1], hash[2], hash[3], hash[4]);
 
     memcpy(state->hashblock + state->hbpos, hash, state->hashsz);
     state->hbpos += state->hashsz;
@@ -629,7 +629,7 @@ static int write_block(struct stub *stub, off_t blkoff, const char *blk,
     return 0;
 }
 
-static void do_hash(void *hash, const char *buf, int n)
+static void do_hash(void *hash, const void *buf, int n)
 {
     SHA256_CTX ctx;
     SHA256_Init(&ctx);
@@ -637,9 +637,9 @@ static void do_hash(void *hash, const char *buf, int n)
     SHA256_Final(hash, &ctx);
 }
 
-static int stub_write(struct stub *stub, const char *buf, size_t n, off_t off)
+static int stub_write(struct stub *stub, const void *buf, size_t n, off_t off)
 {
-    char hash[HASH_MAX];
+    u8 hash[HASH_MAX];
     int ret = 0;
     int datafd = -1;
     off_t datapos = -1;
@@ -679,7 +679,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
     char b[PATH_MAX+1];
     int i, n, ret = 0;
     struct stub *stub;
-    char *fillbuf = NULL;
+    u8 *fillbuf = NULL;
     size_t nwrite = 0;
     off_t orig_offset = offset;
 
