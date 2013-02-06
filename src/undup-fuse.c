@@ -38,6 +38,8 @@ struct undup_state {
     char *hashblock; // in-progress block of hashes
     int hbpos;       // current position in hashblock
     struct bloom_params *bloom;
+    u8 **blooms;
+    int nblooms;
 };
 
 static struct undup_state *state;
@@ -139,6 +141,12 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
     int nhash = HASH_BLOCK / hashsz;
 
     for (i = 0; ; i++) {
+        if (i < state->nblooms &&
+                state->blooms[i] &&
+                !bloom_present(state->bloom, state->blooms[i], hash)) {
+            continue;
+        }
+
         blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
         n = pread(state->fd, buf, HASH_BLOCK, blkpos);
         debug("lookup_hash pos=%lld n=%d\n", (long long)blkpos, n);
@@ -150,6 +158,28 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
             errno = EIO;
             return -1;
         }
+
+        if (i >= state->nblooms || !state->blooms[i]) {
+            int newn = i + 1;
+            u8 **newblooms = realloc(state->blooms, newn * sizeof *state->blooms);
+            u8 *newbloom = malloc(state->bloom->bytesize); // XXX
+
+            if (!newblooms || !newbloom) {
+                free(newblooms);
+                free(newbloom);
+            } else {
+                for (j = state->nblooms; j < i; j++)
+                    newblooms[j] = NULL;
+                newblooms[i] = newbloom;
+                bloom_init(state->bloom, newblooms[i]);
+                state->blooms = newblooms;
+                state->nblooms = newn;
+                for (j = 0; j < nhash; j++) {
+                    bloom_insert(state->bloom, state->blooms[i], hash);
+                }
+            }
+        }
+
         for (j = 0; j < nhash; j++) {
             debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
                   (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3],
