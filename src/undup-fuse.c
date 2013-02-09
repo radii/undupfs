@@ -132,6 +132,8 @@ static void dump_blooms(const u8 *hash)
 {
     int i;
 
+    if (f_debug == NULL) return;
+
     for (i=0; i<state->nblooms; i++) {
         debug("bloom[%d] = %p\n", i, state->blooms[i]);
         if (state->blooms[i])
