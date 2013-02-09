@@ -191,7 +191,8 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
                 state->blooms = newblooms;
                 state->nblooms = newn;
                 for (j = 0; j < nhash; j++) {
-                    bloom_insert(state->bloom, state->blooms[i], hash);
+                    void *p = buf + j * state->hashsz;
+                    bloom_insert(state->bloom, state->blooms[i], p);
                 }
             }
             dump_blooms(hash);
