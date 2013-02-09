@@ -178,6 +178,16 @@ int bloom_present(struct bloom_params *p, const u8 *b, const u8 *key)
     return 1;
 }
 
+void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f)
+{
+    int i;
+
+    for (i=0; i<p->bytesize; i++) {
+        fprintf(f, "%02x%s", b[i], (i % 16 == 15) ? "\n" : "  " + (i % 8 != 7));
+    }
+    fprintf(f, "\n");
+}
+
 #ifdef MAIN
 
 int o_verbose = 0;
