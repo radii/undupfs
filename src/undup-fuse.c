@@ -128,6 +128,17 @@ static int stub_get_hash(struct stub *stub, off_t off, u8 *hash)
     return 0;
 }
 
+static void dump_blooms(const u8 *hash)
+{
+    int i;
+
+    for (i=0; i<state->nblooms; i++) {
+        debug("bloom[%d] = %p\n", i, state->blooms[i]);
+        if (state->blooms[i])
+            bloom_dump(state->bloom, state->blooms[i], f_debug);
+    }
+}
+
 /*
  * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
  * If not found, return 0.  On error, return -1 with errno set.
@@ -183,6 +194,7 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
                     bloom_insert(state->bloom, state->blooms[i], hash);
                 }
             }
+            dump_blooms(hash);
         }
 
         for (j = 0; j < nhash; j++) {
@@ -211,17 +223,6 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
         }
     }
     return 0;
-}
-
-static void dump_blooms(u8 *hash)
-{
-    int i;
-
-    for (i=0; i<state->nblooms; i++) {
-        debug("bloom[%d] = %p\n", i, state->blooms[i]);
-        if (state->blooms[i])
-            bloom_dump(state->bloom, state->blooms[i], f_debug);
-    }
 }
 
 static int stub_read(struct stub *stub, void *buf, size_t size, off_t offset)
