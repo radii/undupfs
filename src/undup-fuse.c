@@ -147,6 +147,9 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
             debug("%02x%02x%02x%02x bloom %d/%d miss\n",
                   hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
             continue;
+        } else {
+            debug("%02x%02x%02x%02x bloom %d/%d possible\n",
+                  hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
         }
 
         blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
