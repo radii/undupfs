@@ -46,6 +46,7 @@ static struct undup_state *state;
 
 int o_verbose = 0;
 FILE *f_debug = NULL;
+FILE *f_stats = NULL;
 
 static struct stub *stub_open(const char *stubpath, int rdwr)
 {
@@ -139,6 +140,43 @@ static void dump_blooms(const u8 *hash)
         if (state->blooms[i])
             bloom_dump(state->bloom, state->blooms[i], f_debug);
     }
+    fflush(f_debug);
+}
+
+static int event_counts[COUNT_MAX];
+static double event_times[COUNT_MAX];
+static u64 event_values[COUNT_MAX];
+
+void count_event(int event, double elapsed, int value)
+{
+    ASSERT(event > 0 && event < COUNT_MAX);
+    event_counts[event]++;
+    event_times[event] += elapsed;
+    event_values[event] += value;
+}
+
+void count_stats(FILE *f)
+{
+    int i, n, w;
+    fprintf(f, "read:  %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
+            event_times[COUNT_READ],
+            event_counts[COUNT_READ],
+            event_times[COUNT_READ] * 1e6 / event_counts[COUNT_READ],
+            event_values[COUNT_READ] / event_times[COUNT_READ] / 1024 / 1024);
+    fprintf(f, "write: %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
+            event_times[COUNT_WRITE],
+            event_counts[COUNT_WRITE],
+            event_times[COUNT_WRITE] * 1e6 / event_counts[COUNT_WRITE],
+            event_values[COUNT_WRITE] / event_times[COUNT_WRITE] / 1024 / 1024);
+    for (i=n=w=0; i<state->nblooms; i++) {
+        if (state->blooms[i]) {
+            n++;
+            w += bloom_weight(state->bloom, state->blooms[i]);
+        }
+    }
+    fprintf(f, "bloom: %d/%d tables, %d bits set (%.0f%%)\n",
+            n, state->nblooms, w,
+            w * 100.0 / (state->nblooms * state->bloom->size));
 }
 
 /*
@@ -605,6 +643,21 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     return 0;
 }
 
+
+void count_maybe_dump(double t)
+{
+    static double last_t;
+
+    if (!f_stats) return;
+    if (t < last_t + 1) return;
+
+    last_t = t;
+
+    fprintf(f_stats, "%.3f\n", t);
+    count_stats(f_stats);
+    fflush(f_stats);
+}
+
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi)
 {
@@ -629,7 +682,8 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     ret = stub_read(stub, buf, size, offset);
     debug("undup_read return %d errno=%d\n", ret, errno);
     t1 = rtc();
-    count_event(COUNT_WRITE, t1 - t0, size);
+    count_event(COUNT_READ, t1 - t0, size);
+    count_maybe_dump(t1);
     return ret;
 }
 
@@ -836,6 +890,7 @@ out_close:
     free(fillbuf);
     t1 = rtc();
     count_event(COUNT_WRITE, t1 - t0, size);
+    count_maybe_dump(t1);
     debug("undup_write ret=%d n=%d errno=%d\n", ret, n, errno);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
@@ -874,6 +929,10 @@ static int undup_init(const char *basedir)
     char *f = getenv("UNDUP_DEBUG");
     if (f) {
         f_debug = fopen(f, "w");
+    }
+    f = getenv("UNDUP_STATS");
+    if (f) {
+        f_stats = fopen(f, "w");
     }
     n = snprintf(fname, sizeof fname, "%s/.undupfs/undup.dat", basedir);
     if (n > sizeof fname) return -ENAMETOOLONG;

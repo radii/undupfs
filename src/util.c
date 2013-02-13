@@ -57,29 +57,3 @@ void debug(char *fmt, ...)
     va_end(ap);
     fflush(f_debug);
 }
-
-int event_counts[COUNT_MAX];
-double event_times[COUNT_MAX];
-u64 event_values[COUNT_MAX];
-
-void count_event(int event, double elapsed, int value)
-{
-    ASSERT(event > 0 && event < COUNT_MAX);
-    event_counts[event]++;
-    event_times[event] += elapsed;
-    event_values[event] += value;
-}
-
-void count_stats(FILE *f)
-{
-    fprintf(f, "read:  %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
-            event_times[COUNT_READ],
-            event_counts[COUNT_READ],
-            event_counts[COUNT_READ] / event_times[COUNT_READ],
-            event_values[COUNT_READ] / event_times[COUNT_READ] / 1024 / 1024);
-    fprintf(f, "write: %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
-            event_times[COUNT_WRITE],
-            event_counts[COUNT_WRITE],
-            event_counts[COUNT_WRITE] / event_times[COUNT_WRITE],
-            event_values[COUNT_WRITE] / event_times[COUNT_WRITE] / 1024 / 1024);
-}
