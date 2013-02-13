@@ -42,4 +42,8 @@ int bloom_insert(struct bloom_params *p, u8 *b, const u8 *key);
  */
 int bloom_present(struct bloom_params *p, const u8 *b, const u8 *key);
 
+/* Dump debug info about bloom filter B under params P to F.
+ */
+void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f);
+
 #endif /* BLOOM_H_ */
