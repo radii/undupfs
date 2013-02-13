@@ -611,6 +611,9 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     char b[PATH_MAX+1];
     int n, ret;
     struct stub *stub;
+    double t0, t1;
+
+    t0 = rtc();
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -625,6 +628,8 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
 
     ret = stub_read(stub, buf, size, offset);
     debug("undup_read return %d errno=%d\n", ret, errno);
+    t1 = rtc();
+    count_event(COUNT_WRITE, t1 - t0, size);
     return ret;
 }
 
@@ -733,6 +738,9 @@ static int undup_write(const char *path, const char *buf, size_t size,
     u8 *fillbuf = NULL;
     size_t nwrite = 0;
     off_t orig_offset = offset;
+    double t0, t1;
+
+    t0 = rtc();
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -826,6 +834,8 @@ out:
     stub_update_len(stub, orig_offset + nwrite);
 out_close:
     free(fillbuf);
+    t1 = rtc();
+    count_event(COUNT_WRITE, t1 - t0, size);
     debug("undup_write ret=%d n=%d errno=%d\n", ret, n, errno);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }

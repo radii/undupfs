@@ -20,4 +20,11 @@ extern FILE *f_debug;
 void verbose(char *fmt, ...);
 void debug(char *fmt, ...);
 
+void count_event(int event, double elapsed, int val);
+void count_stats(FILE *f);
+
+#define COUNT_WRITE 1
+#define COUNT_READ  2
+#define COUNT_MAX   3
+
 #endif /* SHARED_H_ */
