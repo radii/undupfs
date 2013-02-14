@@ -143,9 +143,9 @@ static void dump_blooms(const u8 *hash)
     fflush(f_debug);
 }
 
-static int event_counts[COUNT_MAX];
-static double event_times[COUNT_MAX];
-static u64 event_values[COUNT_MAX];
+static int event_counts[COUNT_MAX], event_counts_prev[COUNT_MAX];
+static double event_times[COUNT_MAX], event_times_prev[COUNT_MAX];
+static u64 event_values[COUNT_MAX], event_values_prev[COUNT_MAX];
 
 void count_event(int event, double elapsed, int value)
 {
@@ -168,6 +168,12 @@ void count_stats(FILE *f)
             event_counts[COUNT_WRITE],
             event_times[COUNT_WRITE] * 1e6 / event_counts[COUNT_WRITE],
             event_values[COUNT_WRITE] / event_times[COUNT_WRITE] / 1024 / 1024);
+    fprintf(f, "bloom: %d query, %d hit, %d false positive, %.0f%% fp rate\n",
+            event_counts[COUNT_BLOOM_QUERY],
+            event_counts[COUNT_BLOOM_HIT],
+            event_counts[COUNT_BLOOM_FP],
+            event_counts[COUNT_BLOOM_FP] * 100.0 /
+            event_counts[COUNT_BLOOM_QUERY]);
     for (i=n=w=0; i<state->nblooms; i++) {
         if (state->blooms[i]) {
             n++;
@@ -177,6 +183,7 @@ void count_stats(FILE *f)
     fprintf(f, "bloom: %d/%d tables, %d bits set (%.0f%%)\n",
             n, state->nblooms, w,
             w * 100.0 / (state->nblooms * state->bloom->size));
+
 }
 
 /*
@@ -192,6 +199,7 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
     int nhash = HASH_BLOCK / hashsz;
 
     for (i = 0; ; i++) {
+        count_event(COUNT_BLOOM_QUERY, 0, 1);
         if (i < state->nblooms &&
                 state->blooms[i] &&
                 !bloom_present(state->bloom, state->blooms[i], hash)) {
@@ -246,9 +254,11 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
             if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
                 *fd = state->fd;
                 *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
+                count_event(COUNT_BLOOM_HIT, 0, 1);
                 return 1;
             }
         }
+        count_event(COUNT_BLOOM_FP, 0, 1);
     }
     for (j = 0; j < state->hbpos / hashsz; j++) {
         debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
@@ -647,15 +657,20 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
 void count_maybe_dump(double t)
 {
     static double last_t;
+    double t0, t1;
 
     if (!f_stats) return;
     if (t < last_t + 1) return;
+
+    t0 = rtc();
 
     last_t = t;
 
     fprintf(f_stats, "%.3f\n", t);
     count_stats(f_stats);
     fflush(f_stats);
+    t1 = rtc();
+    fprintf(f_stats, "stats output took %.6f\n", t1 - t0);
 }
 
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,

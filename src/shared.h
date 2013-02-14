@@ -23,8 +23,13 @@ void debug(char *fmt, ...);
 void count_event(int event, double elapsed, int val);
 void count_stats(FILE *f);
 
-#define COUNT_WRITE 1
-#define COUNT_READ  2
-#define COUNT_MAX   3
+enum {
+    COUNT_WRITE         = 1,
+    COUNT_READ,
+    COUNT_BLOOM_QUERY,
+    COUNT_BLOOM_HIT,
+    COUNT_BLOOM_FP,
+    COUNT_MAX
+};
 
 #endif /* SHARED_H_ */
