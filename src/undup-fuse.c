@@ -155,7 +155,7 @@ void count_event(int event, double elapsed, int value)
     event_values[event] += value;
 }
 
-void count_stats(FILE *f)
+void count_print_stats(FILE *f)
 {
     int i, n, w;
     fprintf(f, "read:  %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
@@ -667,7 +667,7 @@ void count_maybe_dump(double t)
     last_t = t;
 
     fprintf(f_stats, "%.3f\n", t);
-    count_stats(f_stats);
+    count_print_stats(f_stats);
     fflush(f_stats);
     t1 = rtc();
     fprintf(f_stats, "stats output took %.6f\n", t1 - t0);
