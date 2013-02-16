@@ -224,6 +224,28 @@ void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f)
 int o_verbose = 0;
 FILE *f_debug = NULL;
 
+static int hexnibble(int x)
+{
+    if (x >= '0' && x <= '9')
+        return x - '0';
+    if (x >= 'a' && x <= 'f')
+        return x - 'a' + 10;
+    if (x >= 'A' && x <= 'F')
+        return x - 'A' + 10;
+    ASSERT(0 == 1);
+    return 0;
+}
+
+static void hex2bytes(u8 *b, const char *p)
+{
+    int i;
+
+    for(i=0; p[i] && p[i+1]; i+=2) {
+        b[i/2] = hexnibble(p[i]) << 4 | hexnibble(p[i+1]);
+    }
+    ASSERT(p[i] == '\0');
+}
+
 int main(void)
 {
     printf("running Bloom filter tests\n");
@@ -299,11 +321,59 @@ int main(void)
         ASSERT(set_bit(a, 20) == 0);
         ASSERT(a[2] == 0x08); ntest++;
 
-        printf(" passed %d test\n", ntest);
+        printf(" passed %d tests\n", ntest);
     }
     printf("testing bloom_insert ..."); fflush(stdout);
     {
         int ntest = 0;
+        int hashsz = 32; // SHA256
+        int bitsperhash = 7;
+        u8 h[10][32];
+        struct bloom_params *p;
+        u8 *b;
+
+        hex2bytes(h[0], "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa");
+        hex2bytes(h[1], "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865");
+        hex2bytes(h[2], "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3");
+        hex2bytes(h[3], "1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2");
+        hex2bytes(h[4], "7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d");
+        hex2bytes(h[5], "f0b5c2c2211c8d67ed15e75e656c7862d086e9245420892a7de62cd9ec582a06");
+        hex2bytes(h[6], "06e9d52c1720fca412803e3b07c4b228ff113e303f4c7ab94665319d832bbfb7");
+        hex2bytes(h[7], "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58");
+        hex2bytes(h[8], "aa67a169b0bba217aa0aa88a65346920c84c42447c36ba5f7ea65f422c1fe5d8");
+        hex2bytes(h[9], "2e6d31a5983a91251bfae5aefa1c0a19d8ba3cf601d0e8a706b4cfa9661a6b8a");
+
+        ASSERT(h[0][0] == 0x9a); ntest++;
+        ASSERT(h[0][31] == 0xaa); ntest++;
+        ASSERT(h[1][0] == 0x43); ntest++;
+        ASSERT(h[1][31] == 0x65); ntest++;
+
+        p = bloom_setup(1024, bitsperhash, hashsz);
+        b = malloc(p->bytesize); // XXX
+
+        ASSERT(b);
+
+        bloom_init(p, b);
+        bloom_insert(p, b, h[0]);
+        ASSERT(bloom_weight(p, b) == bitsperhash); ntest++;
+        bloom_insert(p, b, h[0]);
+        ASSERT(bloom_weight(p, b) == bitsperhash); ntest++;
+        bloom_insert(p, b, h[1]);
+        ASSERT(bloom_weight(p, b) > 2 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 2 * bitsperhash + 2); ntest++;
+        bloom_insert(p, b, h[1]);
+        ASSERT(bloom_weight(p, b) > 2 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 2 * bitsperhash + 2); ntest++;
+
+        ASSERT(bloom_present(p, b, h[2]) == 0); ntest++;
+
+        bloom_insert(p, b, h[2]);
+        ASSERT(bloom_weight(p, b) > 3 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 3 * bitsperhash + 2); ntest++;
+
+        ASSERT(bloom_present(p, b, h[2]) == 1); ntest++;
+
+        printf(" passed %d tests\n", ntest);
     }
 
     return 0;
