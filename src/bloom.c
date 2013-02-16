@@ -331,6 +331,7 @@ int main(void)
         u8 h[10][32];
         struct bloom_params *p;
         u8 *b;
+        int x;
 
         hex2bytes(h[0], "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa");
         hex2bytes(h[1], "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865");
@@ -360,18 +361,64 @@ int main(void)
         ASSERT(bloom_weight(p, b) == bitsperhash); ntest++;
         bloom_insert(p, b, h[1]);
         ASSERT(bloom_weight(p, b) > 2 * bitsperhash - 2);
-        ASSERT(bloom_weight(p, b) < 2 * bitsperhash + 2); ntest++;
+        ASSERT(bloom_weight(p, b) < 2 * bitsperhash + 1); ntest++;
         bloom_insert(p, b, h[1]);
         ASSERT(bloom_weight(p, b) > 2 * bitsperhash - 2);
-        ASSERT(bloom_weight(p, b) < 2 * bitsperhash + 2); ntest++;
+        ASSERT(bloom_weight(p, b) < 2 * bitsperhash + 1); ntest++;
 
         ASSERT(bloom_present(p, b, h[2]) == 0); ntest++;
 
         bloom_insert(p, b, h[2]);
         ASSERT(bloom_weight(p, b) > 3 * bitsperhash - 2);
-        ASSERT(bloom_weight(p, b) < 3 * bitsperhash + 2); ntest++;
+        ASSERT(bloom_weight(p, b) < 3 * bitsperhash + 1); ntest++;
 
         ASSERT(bloom_present(p, b, h[2]) == 1); ntest++;
+
+        x = bloom_weight(p, b);
+        bloom_insert(p, b, h[2]);
+        ASSERT(x == bloom_weight(p, b));
+
+        ASSERT(bloom_present(p, b, h[3]) == 0); ntest++;
+        bloom_insert(p, b, h[3]);
+        ASSERT(bloom_present(p, b, h[3]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 4 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 4 * bitsperhash + 1); ntest++;
+
+        ASSERT(bloom_present(p, b, h[4]) == 0); ntest++;
+        bloom_insert(p, b, h[4]);
+        ASSERT(bloom_present(p, b, h[4]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 5 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 5 * bitsperhash + 1); ntest++;
+
+        ASSERT(bloom_present(p, b, h[5]) == 0); ntest++;
+        bloom_insert(p, b, h[5]);
+        ASSERT(bloom_present(p, b, h[5]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 6 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 6 * bitsperhash + 1); ntest++;
+
+        ASSERT(bloom_present(p, b, h[6]) == 0); ntest++;
+        bloom_insert(p, b, h[6]);
+        ASSERT(bloom_present(p, b, h[6]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 7 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 7 * bitsperhash + 1); ntest++;
+
+        ASSERT(bloom_present(p, b, h[7]) == 0); ntest++;
+        bloom_insert(p, b, h[7]);
+        ASSERT(bloom_present(p, b, h[7]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 8 * bitsperhash - 2);
+        ASSERT(bloom_weight(p, b) < 8 * bitsperhash + 1); ntest++;
+
+        ASSERT(bloom_present(p, b, h[8]) == 0); ntest++;
+        bloom_insert(p, b, h[8]);
+        ASSERT(bloom_present(p, b, h[8]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 9 * bitsperhash - 3);
+        ASSERT(bloom_weight(p, b) < 9 * bitsperhash + 1); ntest++;
+
+        ASSERT(bloom_present(p, b, h[9]) == 0); ntest++;
+        bloom_insert(p, b, h[9]);
+        ASSERT(bloom_present(p, b, h[9]) == 1); ntest++;
+        ASSERT(bloom_weight(p, b) > 10 * bitsperhash - 3);
+        ASSERT(bloom_weight(p, b) < 10 * bitsperhash + 1); ntest++;
 
         printf(" passed %d tests\n", ntest);
     }
