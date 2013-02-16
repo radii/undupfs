@@ -158,22 +158,32 @@ void count_event(int event, double elapsed, int value)
 void count_print_stats(FILE *f)
 {
     int i, n, w;
+    int c[COUNT_MAX];
+    double t[COUNT_MAX];
+    u64 v[COUNT_MAX];
+
+    for (i=0; i<COUNT_MAX; i++) {
+        c[i] = event_counts[i] - event_counts_prev[i];
+        t[i] = event_times[i] - event_times_prev[i];
+        v[i] = event_values[i] - event_values_prev[i];
+    }
+
     fprintf(f, "read:  %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
-            event_times[COUNT_READ],
-            event_counts[COUNT_READ],
-            event_times[COUNT_READ] * 1e6 / event_counts[COUNT_READ],
-            event_values[COUNT_READ] / event_times[COUNT_READ] / 1024 / 1024);
+            t[COUNT_READ],
+            c[COUNT_READ],
+            t[COUNT_READ] * 1e6 / c[COUNT_READ],
+            v[COUNT_READ] / t[COUNT_READ] / 1024 / 1024);
     fprintf(f, "write: %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
-            event_times[COUNT_WRITE],
-            event_counts[COUNT_WRITE],
-            event_times[COUNT_WRITE] * 1e6 / event_counts[COUNT_WRITE],
-            event_values[COUNT_WRITE] / event_times[COUNT_WRITE] / 1024 / 1024);
+            t[COUNT_WRITE],
+            c[COUNT_WRITE],
+            t[COUNT_WRITE] * 1e6 / c[COUNT_WRITE],
+            v[COUNT_WRITE] / t[COUNT_WRITE] / 1024 / 1024);
     fprintf(f, "bloom: %d query, %d hit, %d false positive, %.0f%% fp rate\n",
-            event_counts[COUNT_BLOOM_QUERY],
-            event_counts[COUNT_BLOOM_HIT],
-            event_counts[COUNT_BLOOM_FP],
-            event_counts[COUNT_BLOOM_FP] * 100.0 /
-            event_counts[COUNT_BLOOM_QUERY]);
+            c[COUNT_BLOOM_QUERY],
+            c[COUNT_BLOOM_HIT],
+            c[COUNT_BLOOM_FP],
+            c[COUNT_BLOOM_FP] * 100.0 /
+            (c[COUNT_BLOOM_HIT] + c[COUNT_BLOOM_FP]));
     for (i=n=w=0; i<state->nblooms; i++) {
         if (state->blooms[i]) {
             n++;
@@ -184,6 +194,9 @@ void count_print_stats(FILE *f)
             n, state->nblooms, w,
             w * 100.0 / (state->nblooms * state->bloom->size));
 
+    memcpy(event_times_prev, event_times, sizeof event_times);
+    memcpy(event_counts_prev, event_counts, sizeof event_counts);
+    memcpy(event_values_prev, event_values, sizeof event_values);
 }
 
 /*
