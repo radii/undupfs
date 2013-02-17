@@ -29,7 +29,7 @@
  *
  * Keys are inserted into a filter by calling bloom_insert().
  *
- * Key presence is tested by calling bloom_test().
+ * Key presence is tested by calling bloom_present().
  */
 
 static int log2_ceil(int x)
@@ -221,6 +221,8 @@ void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f)
 
 #ifdef MAIN
 
+#include <openssl/sha.h>
+
 int o_verbose = 0;
 FILE *f_debug = NULL;
 
@@ -244,6 +246,14 @@ static void hex2bytes(u8 *b, const char *p)
         b[i/2] = hexnibble(p[i]) << 4 | hexnibble(p[i+1]);
     }
     ASSERT(p[i] == '\0');
+}
+
+static void hash(void *h, const void *buf, int n)
+{
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    SHA256_Update(&ctx, buf, n);
+    SHA256_Final(h, &ctx);
 }
 
 int main(void)
@@ -331,7 +341,8 @@ int main(void)
         u8 h[10][32];
         struct bloom_params *p;
         u8 *b;
-        int x;
+        int x, i;
+        int fp = 0;
 
         hex2bytes(h[0], "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa");
         hex2bytes(h[1], "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865");
@@ -419,6 +430,26 @@ int main(void)
         ASSERT(bloom_present(p, b, h[9]) == 1); ntest++;
         ASSERT(bloom_weight(p, b) > 10 * bitsperhash - 3);
         ASSERT(bloom_weight(p, b) < 10 * bitsperhash + 1); ntest++;
+
+        fp = 0;
+        for (i=0; i<300; i++) {
+            char a[10];
+            u8 g[32];
+            int collided, before, after;
+
+            snprintf(a, sizeof a, "%d", i);
+            hash(g, a, sizeof(a));
+            before = bloom_present(p, b, g);
+            collided = bloom_insert(p, b, g);
+            after = bloom_present(p, b, g);
+            ASSERT(after);
+            ASSERT(before == collided);
+            fp += collided;
+            ntest++;
+        }
+        ASSERT(fp < 50);
+        ASSERT(fp > 1);
+        ntest++;
 
         printf(" passed %d tests\n", ntest);
     }
