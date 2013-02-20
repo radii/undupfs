@@ -149,6 +149,7 @@ static u64 event_values[COUNT_MAX], event_values_prev[COUNT_MAX];
 
 void count_event(int event, double elapsed, int value)
 {
+    if (!f_stats) return;
     ASSERT(event > 0 && event < COUNT_MAX);
     event_counts[event]++;
     event_times[event] += elapsed;
