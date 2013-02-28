@@ -952,7 +952,7 @@ static int undup_init(const char *basedir)
     off_t flen;
     struct stat st;
     struct undup_hdr hdr;
-    int filtersz = 1024;
+    int filtersz0 = 1024;
     int bitcount = 7;
 
     char *f = getenv("UNDUP_DEBUG");
@@ -999,7 +999,7 @@ static int undup_init(const char *basedir)
     // if ver == 1
     state->hashsz    = 32; // SHA256
 
-    state->bp0 = bloom_setup(filtersz, bitcount, state->hashsz);
+    state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
 
     bucket_validate(state);
 
