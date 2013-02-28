@@ -37,8 +37,8 @@ struct undup_state {
     off_t bucketlen; // length of bucketfile
     char *hashblock; // in-progress block of hashes
     int hbpos;       // current position in hashblock
-    struct bloom_params *bloom;
-    u8 **blooms;
+    struct bloom_params *bp0;
+    u8 **bloom0;
     int nblooms;
 };
 
@@ -136,9 +136,9 @@ static void dump_blooms(const u8 *hash)
     if (f_debug == NULL) return;
 
     for (i=0; i<state->nblooms; i++) {
-        debug("bloom[%d] = %p\n", i, state->blooms[i]);
-        if (state->blooms[i])
-            bloom_dump(state->bloom, state->blooms[i], f_debug);
+        debug("bloom[%d] = %p\n", i, state->bloom0[i]);
+        if (state->bloom0[i])
+            bloom_dump(state->bp0, state->bloom0[i], f_debug);
     }
     fflush(f_debug);
 }
@@ -186,14 +186,14 @@ void count_print_stats(FILE *f)
             c[COUNT_BLOOM_FP] * 100.0 /
             (c[COUNT_BLOOM_HIT] + c[COUNT_BLOOM_FP]));
     for (i=n=w=0; i<state->nblooms; i++) {
-        if (state->blooms[i]) {
+        if (state->bloom0[i]) {
             n++;
-            w += bloom_weight(state->bloom, state->blooms[i]);
+            w += bloom_weight(state->bp0, state->bloom0[i]);
         }
     }
     fprintf(f, "bloom: %d/%d tables, %d bits set (%.0f%%)\n",
             n, state->nblooms, w,
-            w * 100.0 / (state->nblooms * state->bloom->size));
+            w * 100.0 / (state->nblooms * state->bp0->size));
 
     memcpy(event_times_prev, event_times, sizeof event_times);
     memcpy(event_counts_prev, event_counts, sizeof event_counts);
@@ -215,8 +215,8 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
     for (i = 0; ; i++) {
         count_event(COUNT_BLOOM_QUERY, 0, 1);
         if (i < state->nblooms &&
-                state->blooms[i] &&
-                !bloom_present(state->bloom, state->blooms[i], hash)) {
+                state->bloom0[i] &&
+                !bloom_present(state->bp0, state->bloom0[i], hash)) {
             debug("%02x%02x%02x%02x bloom %d/%d miss\n",
                   hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
             continue;
@@ -237,10 +237,10 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
             return -1;
         }
 
-        if (i >= state->nblooms || !state->blooms[i]) {
+        if (i >= state->nblooms || !state->bloom0[i]) {
             int newn = i + 1;
-            u8 **newblooms = realloc(state->blooms, newn * sizeof *state->blooms);
-            u8 *newbloom = malloc(state->bloom->bytesize); // XXX
+            u8 **newblooms = realloc(state->bloom0, newn * sizeof *state->bloom0);
+            u8 *newbloom = malloc(state->bp0->bytesize); // XXX
 
             if (!newblooms || !newbloom) {
                 free(newblooms);
@@ -249,12 +249,12 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
                 for (j = state->nblooms; j < i; j++)
                     newblooms[j] = NULL;
                 newblooms[i] = newbloom;
-                bloom_init(state->bloom, newblooms[i]);
-                state->blooms = newblooms;
+                bloom_init(state->bp0, newblooms[i]);
+                state->bloom0 = newblooms;
                 state->nblooms = newn;
                 for (j = 0; j < nhash; j++) {
                     void *p = buf + j * state->hashsz;
-                    bloom_insert(state->bloom, state->blooms[i], p);
+                    bloom_insert(state->bp0, state->bloom0[i], p);
                 }
             }
             dump_blooms(hash);
@@ -999,7 +999,7 @@ static int undup_init(const char *basedir)
     // if ver == 1
     state->hashsz    = 32; // SHA256
 
-    state->bloom = bloom_setup(filtersz, bitcount, state->hashsz);
+    state->bp0 = bloom_setup(filtersz, bitcount, state->hashsz);
 
     bucket_validate(state);
 
