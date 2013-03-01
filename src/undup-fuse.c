@@ -38,8 +38,11 @@ struct undup_state {
     char *hashblock; // in-progress block of hashes
     int hbpos;       // current position in hashblock
     struct bloom_params *bp0;
+    struct bloom_params *bp1;
     u8 **bloom0;
+    u8 **bloom1;
     int nblooms;
+    int bloomscale;
 };
 
 static struct undup_state *state;
@@ -136,9 +139,14 @@ static void dump_blooms(const u8 *hash)
     if (f_debug == NULL) return;
 
     for (i=0; i<state->nblooms; i++) {
-        debug("bloom[%d] = %p\n", i, state->bloom0[i]);
+        debug("bloom0[%d] = %p\n", i, state->bloom0[i]);
         if (state->bloom0[i])
             bloom_dump(state->bp0, state->bloom0[i], f_debug);
+    }
+    for (i=0; i<state->nblooms / state->bloomscale; i++) {
+        debug("bloom1[%d] = %p\n", i, state->bloom1[i]);
+        if (state->bloom1[i])
+            bloom_dump(state->bp1, state->bloom1[i], f_debug);
     }
     fflush(f_debug);
 }
@@ -191,9 +199,18 @@ void count_print_stats(FILE *f)
             w += bloom_weight(state->bp0, state->bloom0[i]);
         }
     }
-    fprintf(f, "bloom: %d/%d tables, %d bits set (%.0f%%)\n",
+    fprintf(f, "bloom0: %d/%d tables, %d bits set (%.0f%%)\n",
             n, state->nblooms, w,
             w * 100.0 / (state->nblooms * state->bp0->size));
+    for (i=n=w=0; i<state->nblooms / state->bloomscale; i++) {
+        if (state->bloom1[i]) {
+            n++;
+            w += bloom_weight(state->bp1, state->bloom1[i]);
+        }
+    }
+    fprintf(f, "bloom1: %d/%d tables, %d bits set (%.0f%%)\n",
+            n, state->nblooms, w,
+            w * 100.0 / (state->nblooms * state->bp1->size));
 
     memcpy(event_times_prev, event_times, sizeof event_times);
     memcpy(event_counts_prev, event_counts, sizeof event_counts);
@@ -239,22 +256,45 @@ static int lookup_hash(const u8 *hash, int *fd, off_t *off)
 
         if (i >= state->nblooms || !state->bloom0[i]) {
             int newn = i + 1;
-            u8 **newblooms = realloc(state->bloom0, newn * sizeof *state->bloom0);
-            u8 *newbloom = malloc(state->bp0->bytesize); // XXX
+            u8 **newblooms0 = realloc(state->bloom0, newn * sizeof *state->bloom0);
+            u8 **newblooms1 = 0;
+            u8 *newbloom0 = malloc(state->bp0->bytesize); // XXX
+            u8 *newbloom1 = 0;
 
-            if (!newblooms || !newbloom) {
-                free(newblooms);
-                free(newbloom);
+            if (!state->bloom1 ||
+                    newn / state->bloomscale > i / state->bloomscale) {
+                newblooms1 = realloc(state->bloom1, newn / state->bloomscale * sizeof *state->bloom1 + 1);
+                newbloom1 = malloc(state->bp1->bytesize); // XXX
+                if (!newblooms1 || !newbloom1)
+                    goto free_error;
+            }
+            if (!newblooms0 || !newbloom0) {
+free_error:
+                free(newblooms0);
+                free(newbloom0);
+                free(newblooms1);
+                free(newbloom1);
             } else {
                 for (j = state->nblooms; j < i; j++)
-                    newblooms[j] = NULL;
-                newblooms[i] = newbloom;
-                bloom_init(state->bp0, newblooms[i]);
-                state->bloom0 = newblooms;
+                    newblooms0[j] = NULL;
+                for (j = state->nblooms / state->bloomscale;
+                     j < i / state->bloomscale; j++) {
+                    newblooms1[j] = NULL;
+                }
+                newblooms0[i] = newbloom0;
+                bloom_init(state->bp0, newblooms0[i]);
+                state->bloom0 = newblooms0;
+                if (newblooms1) {
+                    state->bloom1 = newblooms1;
+                    newblooms1[i / state->bloomscale] = newbloom1;
+                    bloom_init(state->bp1, newblooms1[i / state->bloomscale]);
+                    state->bloom1 = newblooms1;
+                }
                 state->nblooms = newn;
                 for (j = 0; j < nhash; j++) {
                     void *p = buf + j * state->hashsz;
                     bloom_insert(state->bp0, state->bloom0[i], p);
+                    bloom_insert(state->bp1, state->bloom1[i / state->bloomscale], p);
                 }
             }
             dump_blooms(hash);
@@ -953,6 +993,7 @@ static int undup_init(const char *basedir)
     struct stat st;
     struct undup_hdr hdr;
     int filtersz0 = 1024;
+    int filtersz1 = filtersz0 * 4;
     int bitcount = 7;
 
     char *f = getenv("UNDUP_DEBUG");
@@ -993,6 +1034,8 @@ static int undup_init(const char *basedir)
     state->bucketlen = flen;
     state->hashblock = malloc(HASH_BLOCK);
     state->hbpos     = 0;
+    state->nblooms   = 0;
+    state->bloomscale = 128;
 
     ASSERT(1 << state->blkshift == state->blksz);
 
@@ -1000,6 +1043,7 @@ static int undup_init(const char *basedir)
     state->hashsz    = 32; // SHA256
 
     state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
+    state->bp1 = bloom_setup(filtersz1, bitcount, state->hashsz);
 
     bucket_validate(state);
 
