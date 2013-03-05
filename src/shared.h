@@ -11,7 +11,7 @@ typedef unsigned long long u64;
 
 /* util.c */
 
-void die(char *fmt, ...);
+void die(char *fmt, ...) __attribute__((noreturn));
 double rtc(void);
 
 extern int o_verbose;
