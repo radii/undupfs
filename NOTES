@@ -57,3 +57,58 @@ probably a smaller ramp.  Could use some real world numbers here, but just
 consider the target use case of multiple VMs running the same guest OS.
 
 
+-----------
+Performance
+-----------
+
+To achieve 100 MB/sec must do 25,600 4k pages per second, 40 usec per page.
+
+----------
+Tree Shape
+----------
+
+Overall Bloom filter tree size, and filter query count per lookup, is affected
+by the number of blocks stored and by the fan-out at each level of the tree.
+Suppose we store 100 GB (26 million blocks, which at 128 blocks per
+first-level filter gives 204,800 first-level filters).  Then various fanouts
+give the following tree values:
+
+Fanout  Height  Filters
+------  ------  -------
+2       18      204800 + 204800
+4       9       204800 + 68266
+8       6       204800 + 29257
+16      5       204800 + 13653
+32      4       204800 + 6606
+64      3       204800 + 3250
+128     3       204800 + 1612
+
+Suppose we store 1TB (250M blocks, 2 million first-level filters).  Then we
+have
+
+2       21      2000000 + 2000000
+4       11      2000000 + 666666
+8       7       2000000 + 285714
+16      6       2000000 + 133333
+32      5       2000000 + 64516
+64      4       2000000 + 31746
+128     3       2000000 + 15748
+
+How often does a higher level tree entry rule out a branch?  This is a
+function of the FP rate, which is determined by the Bloom parameters.  The
+following table provides the accuracy rate (computed as 1 - FP rate) at the
+second level, for various accuracy rates and fanout sizes.  Obviously larger
+fanouts require higher accuracy (more bits per filter), but it's enlightening
+to see how high accuracy is required to get any value at all out of a
+multilevel high fanout Bloom filter tree.
+
+accuracy | fanout
+         |     2     4     8    16    32    64   128 
+---------+------------------------------------------
+0.900000 | 0.656 0.185 0.001 0.000 0.000 0.000 0.000 
+0.990000 | 0.961 0.851 0.526 0.076 0.000 0.000 0.000 
+0.999000 | 0.996 0.984 0.938 0.774 0.359 0.017 0.000 
+0.999900 | 1.000 0.998 0.994 0.975 0.903 0.664 0.194 
+0.999990 | 1.000 1.000 0.999 0.997 0.990 0.960 0.849 
+
+
