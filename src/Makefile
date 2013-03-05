@@ -1,13 +1,14 @@
-CFLAGS := -O2 -g -Wall $(shell pkg-config fuse --cflags)
+CFLAGS := -O2 -g -W -Wall -Wno-sign-compare $(shell pkg-config fuse --cflags)
 LDFLAGS := $(shell pkg-config fuse --libs) -lssl
 
-targets = undup-fuse
+targets := undup-fuse
 
 all: $(targets)
 
-undup-fuse.o: undup-fuse.c shared.h
+%.o: %.c shared.h Makefile
+	$(CC) $(CFLAGS) -c $< -o $@
 
-undup-fuse: undup-fuse.o util.o bloom.o
+undup-fuse: undup-fuse.o undup-core.o util.o bloom.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
 bloom: bloom.c util.o

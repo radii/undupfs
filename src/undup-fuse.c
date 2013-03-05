@@ -24,394 +24,16 @@
 
 #include <openssl/sha.h>
 
+#include "core.h"
 #include "shared.h"
 #include "undupfs.h"
 #include "bloom.h"
-
-struct undup_state {
-    char *basedir;
-    int hashsz;      // the size of a single hash
-    int blksz;       // the size of a block (power of 2)
-    int blkshift;    // the shift for a block (log_2(blksz))
-    int fd;          // filedescriptor to bucketfile
-    off_t bucketlen; // length of bucketfile
-    char *hashblock; // in-progress block of hashes
-    int hbpos;       // current position in hashblock
-    struct bloom_params *bp0;
-    struct bloom_params *bp1;
-    u8 **bloom0;
-    u8 **bloom1;
-    int nblooms;
-    int bloomscale;
-};
 
 static struct undup_state *state;
 
 int o_verbose = 0;
 FILE *f_debug = NULL;
 FILE *f_stats = NULL;
-
-static struct stub *stub_open(const char *stubpath, int rdwr)
-{
-    struct stub *stub = calloc(sizeof *stub, 1);
-    int n, e;
-
-    if (!stub) {
-       errno = ENOMEM;
-       return NULL;
-    }
-
-    ASSERT(rdwr == O_RDONLY || rdwr == O_RDWR || rdwr == O_WRONLY);
-
-    stub->fd = open(stubpath, O_RDWR);
-    if (stub->fd == -1)
-        goto err;
-    n = pread(stub->fd, &stub->hdr, sizeof(stub->hdr), 0);
-    if (n == -1)
-        goto err;
-    if (n < sizeof(stub->hdr)) {
-        errno = EIO;
-        goto err;
-    }
-    debug("stub_open(%s) = %p\n", stubpath, stub);
-
-    return stub;
-err:
-    e = errno;
-    close(stub->fd);
-    free(stub);
-    errno = e;
-    return NULL;
-}
-
-static int stub_close(struct stub *stub)
-{
-    int n, e;
-
-    debug("stub_close(%p)\n", stub);
-    n = close(stub->fd);
-    e = errno;
-    free(stub);
-    return n == -1 ? -e : 0;
-}
-
-static int stub_update_len(struct stub *stub, off_t newlen)
-{
-    int n;
-
-    debug("stub_update_len len=%lld newlen=%lld\n",
-          (long long)stub->hdr.len, (long long)newlen);
-
-    stub->hdr.len = newlen;
-    n = pwrite(stub->fd, &stub->hdr.len, sizeof(stub->hdr.len),
-               offsetof(struct undup_hdr, len));
-    if (n == -1)
-        return -1;
-    if (n < sizeof(stub->hdr.len)) {
-        errno = EIO;
-        return -1;
-    }
-    return 0;
-}
-
-static int stub_get_hash(struct stub *stub, off_t off, u8 *hash)
-{
-    off_t hashpos;
-    int n;
-   
-    hashpos = UNDUP_HDR_SIZE + (off >> state->blkshift) * state->hashsz;
-    n = pread(stub->fd, hash, state->hashsz, hashpos);
-    if (n == -1)
-        return -1;
-    if (n < state->hashsz) {
-        errno = EIO;
-        verbose("got %d bytes (needed %d) at %lld\n",
-                n, state->hashsz, (long long)hashpos);
-        return -1;
-    }
-    return 0;
-}
-
-static void dump_blooms(const u8 *hash)
-{
-    int i;
-
-    if (f_debug == NULL) return;
-
-    for (i=0; i<state->nblooms; i++) {
-        debug("bloom0[%d] = %p\n", i, state->bloom0[i]);
-        if (state->bloom0[i])
-            bloom_dump(state->bp0, state->bloom0[i], f_debug);
-    }
-    for (i=0; i<state->nblooms / state->bloomscale; i++) {
-        debug("bloom1[%d] = %p\n", i, state->bloom1[i]);
-        if (state->bloom1[i])
-            bloom_dump(state->bp1, state->bloom1[i], f_debug);
-    }
-    fflush(f_debug);
-}
-
-static int event_counts[COUNT_MAX], event_counts_prev[COUNT_MAX];
-static double event_times[COUNT_MAX], event_times_prev[COUNT_MAX];
-static u64 event_values[COUNT_MAX], event_values_prev[COUNT_MAX];
-
-void count_event(int event, double elapsed, int value)
-{
-    if (!f_stats) return;
-    ASSERT(event > 0 && event < COUNT_MAX);
-    event_counts[event]++;
-    event_times[event] += elapsed;
-    event_values[event] += value;
-}
-
-void count_print_stats(FILE *f)
-{
-    int i, n, w;
-    int c[COUNT_MAX];
-    double t[COUNT_MAX];
-    u64 v[COUNT_MAX];
-
-    for (i=0; i<COUNT_MAX; i++) {
-        c[i] = event_counts[i] - event_counts_prev[i];
-        t[i] = event_times[i] - event_times_prev[i];
-        v[i] = event_values[i] - event_values_prev[i];
-    }
-
-    fprintf(f, "read:  %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
-            t[COUNT_READ],
-            c[COUNT_READ],
-            t[COUNT_READ] * 1e6 / c[COUNT_READ],
-            v[COUNT_READ] / t[COUNT_READ] / 1024 / 1024);
-    fprintf(f, "write: %.2f elapsed %d total %.2f µs/event %.2f MB/sec\n",
-            t[COUNT_WRITE],
-            c[COUNT_WRITE],
-            t[COUNT_WRITE] * 1e6 / c[COUNT_WRITE],
-            v[COUNT_WRITE] / t[COUNT_WRITE] / 1024 / 1024);
-    fprintf(f, "bloom0: %d query, %d hit, %d false positive, %.0f%% fp rate\n",
-            c[COUNT_BLOOM_QUERY0],
-            c[COUNT_BLOOM_HIT0],
-            c[COUNT_BLOOM_FP0],
-            c[COUNT_BLOOM_FP0] * 100.0 /
-            (c[COUNT_BLOOM_HIT0] + c[COUNT_BLOOM_FP0]));
-    fprintf(f, "bloom1: %d query, %d hit, %d false positive, %.0f%% fp rate\n",
-            c[COUNT_BLOOM_QUERY1],
-            c[COUNT_BLOOM_HIT1],
-            c[COUNT_BLOOM_FP1],
-            c[COUNT_BLOOM_FP1] * 100.0 /
-            (c[COUNT_BLOOM_HIT1] + c[COUNT_BLOOM_FP1]));
-    for (i=n=w=0; i<state->nblooms; i++) {
-        if (state->bloom0[i]) {
-            n++;
-            w += bloom_weight(state->bp0, state->bloom0[i]);
-        }
-    }
-    fprintf(f, "bloom0: %d/%d tables, %d bits set (%.0f%%)\n",
-            n, state->nblooms, w,
-            w * 100.0 / (state->nblooms * state->bp0->size));
-    for (i=n=w=0; i<state->nblooms / state->bloomscale; i++) {
-        if (state->bloom1[i]) {
-            n++;
-            w += bloom_weight(state->bp1, state->bloom1[i]);
-        }
-    }
-    fprintf(f, "bloom1: %d/%d tables, %d bits set (%.0f%%)\n",
-            n, state->nblooms / state->bloomscale, w,
-            w * 100.0 / (state->nblooms / state->bloomscale * state->bp1->size));
-
-    memcpy(event_times_prev, event_times, sizeof event_times);
-    memcpy(event_counts_prev, event_counts, sizeof event_counts);
-    memcpy(event_values_prev, event_values, sizeof event_values);
-}
-
-/*
- * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
- * If not found, return 0.  On error, return -1 with errno set.
- */
-static int lookup_hash(const u8 *hash, int *fd, off_t *off)
-{
-    int h, i, j, n;
-    char buf[HASH_BLOCK];
-    off_t blkpos;
-    int hashsz = state->hashsz;
-    int nhash = HASH_BLOCK / hashsz;
-
-    for (h = 0; ; h++) {
-        count_event(COUNT_BLOOM_QUERY1, 0, 1);
-        if (h < state->nblooms / state->bloomscale &&
-                state->bloom1[h] &&
-                !bloom_present(state->bp1, state->bloom0[h], hash)) {
-            debug("%02x%02x%02x%02x bloom1 %d/%d miss\n",
-                    hash[0], hash[1], hash[2], hash[3], h, state->nblooms / state->bloomscale);
-            continue;
-        }
-        for (i = h * state->bloomscale; i < (h + 1) * state->bloomscale ; i++) {
-            count_event(COUNT_BLOOM_QUERY0, 0, 1);
-            if (i < state->nblooms &&
-                    state->bloom0[i] &&
-                    !bloom_present(state->bp0, state->bloom0[i], hash)) {
-                debug("%02x%02x%02x%02x bloom0 %d/%d miss\n",
-                        hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
-                continue;
-            } else {
-                debug("%02x%02x%02x%02x bloom %d/%d possible\n",
-                        hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
-            }
-
-            blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
-            n = pread(state->fd, buf, HASH_BLOCK, blkpos);
-            debug("lookup_hash pos=%lld n=%d\n", (long long)blkpos, n);
-            if (n == 0)
-                goto out;
-            if (n == -1)
-                return -1;
-            if (n < HASH_BLOCK) {
-                errno = EIO;
-                return -1;
-            }
-
-            if (i >= state->nblooms || !state->bloom0[i]) {
-                int newn = i + 1;
-                u8 **newblooms0 = realloc(state->bloom0, newn * sizeof *state->bloom0);
-                u8 **newblooms1 = 0;
-                u8 *newbloom0 = malloc(state->bp0->bytesize); // XXX
-                u8 *newbloom1 = 0;
-
-                if (!state->bloom1 ||
-                        newn / state->bloomscale >= i / state->bloomscale) {
-                    newblooms1 = realloc(state->bloom1, newn / state->bloomscale * sizeof *state->bloom1 + 1);
-                    newbloom1 = malloc(state->bp1->bytesize); // XXX
-                    if (!newblooms1 || !newbloom1)
-                        goto free_error;
-                }
-                if (!newblooms0 || !newbloom0) {
-free_error:
-                    free(newblooms0);
-                    free(newbloom0);
-                    free(newblooms1);
-                    free(newbloom1);
-                } else {
-                    for (j = state->nblooms; j < i; j++)
-                        newblooms0[j] = NULL;
-                    for (j = state->nblooms / state->bloomscale;
-                            j < i / state->bloomscale; j++) {
-                        newblooms1[j] = NULL;
-                    }
-                    newblooms0[i] = newbloom0;
-                    bloom_init(state->bp0, newblooms0[i]);
-                    state->bloom0 = newblooms0;
-                    if (newblooms1) {
-                        newblooms1[i / state->bloomscale] = newbloom1;
-                        bloom_init(state->bp1, newblooms1[i / state->bloomscale]);
-                        state->bloom1 = newblooms1;
-                    }
-                    state->nblooms = newn;
-                    for (j = 0; j < nhash; j++) {
-                        void *p = buf + j * state->hashsz;
-                        bloom_insert(state->bp0, state->bloom0[i], p);
-                        bloom_insert(state->bp1, state->bloom1[i / state->bloomscale], p);
-                    }
-                }
-                dump_blooms(hash);
-            }
-
-            for (j = 0; j < nhash; j++) {
-                debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
-                        hash[0], hash[1], hash[2], hash[3],
-                        (u8)(buf+j*hashsz)[0], (u8)(buf+j*hashsz)[1],
-                        (u8)(buf+j*hashsz)[2], (u8)(buf+j*hashsz)[3]);
-                if (!memcmp(buf + (j * hashsz), hash, hashsz)) {
-                    *fd = state->fd;
-                    *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
-                    count_event(COUNT_BLOOM_HIT0, 0, 1);
-                    count_event(COUNT_BLOOM_HIT1, 0, 1);
-                    return 1;
-                }
-            }
-            count_event(COUNT_BLOOM_FP0, 0, 1);
-            count_event(COUNT_BLOOM_FP1, 0, 1);
-        }
-    }
-out:
-    for (j = 0; j < state->hbpos / hashsz; j++) {
-        debug("%02x%02x%02x%02x <> %02x%02x%02x%02x\n",
-              (u8)hash[0], (u8)hash[1], (u8)hash[2], (u8)hash[3],
-              (u8)(state->hashblock+j*hashsz)[0],
-              (u8)(state->hashblock+j*hashsz)[1],
-              (u8)(state->hashblock+j*hashsz)[2],
-              (u8)(state->hashblock+j*hashsz)[3]);
-        if (!memcmp(state->hashblock + (j * hashsz), hash, hashsz)) {
-            *fd = state->fd;
-            *off = HASH_BLOCK * (1 + j + (i * (1 + nhash)));
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int stub_read(struct stub *stub, void *buf, size_t size, off_t offset)
-{
-    int tot, n, m, ret;
-    off_t datapos = -1;
-    int datafd = -1;
-    u8 hash[HASH_MAX];
-
-    debug("stub_read(%p, %d, %lld len=%lld)\n", stub,
-            (int)size, (long long)offset, (long long)stub->hdr.len);
-
-    if (offset >= stub->hdr.len)
-        return 0;
-
-    if (offset + size > stub->hdr.len && offset <= stub->hdr.len) {
-        size = stub->hdr.len - offset;
-    }
-
-    tot = 0;
-    while (size > 0) {
-        ret = stub_get_hash(stub, offset, hash);
-        if (ret == -1)
-            return -1;
-        ret = lookup_hash(hash, &datafd, &datapos);
-        debug("lookup got %d %d %lld\n", ret, datafd, datapos);
-        if (ret == -1)
-            return -1;
-        if (ret == 0) {
-            dump_blooms(hash);
-            errno = EIO;
-            return -1;
-        }
-        m = size > state->blksz ? state->blksz : size;
-        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
-        n = pread(datafd, buf, m, datapos);
-        if (n == -1)
-            return -1;
-        if (n < m) {
-            errno = EIO;
-            return -1;
-        }
-        size -= n;
-        buf += n;
-        offset += n;
-        tot += n;
-    }
-
-    return tot;
-}
-
-/*
- * Validate the bucket described by STATE.  This includes adjusting fields
- * such as state->bucketlen so that future blocks go to the right place,
- * but it does not validate block hashes in the bucket.
- *
- * The following system is used to recover from a partially written tail
- * segment.
- *  - for each data block in the segment, check if it is all 0s.
- *  - if nonzero, hash it and store the hash in state->hashblock.
- *  - adjust bucketlen and hbpos to the last non-zero data block.
- */
-static int bucket_validate(struct undup_state *state)
-{
-    return 0;
-}
 
 static int undup_getattr(const char *path, struct stat *stbuf)
 {
@@ -432,13 +54,13 @@ static int undup_getattr(const char *path, struct stat *stbuf)
     if (S_ISDIR(stbuf->st_mode))
         return 0;
 
-    stub = stub_open(b, O_RDONLY);
+    stub = stub_open(state, b, O_RDONLY);
     if (stub == NULL)
         return -errno;
 
     stbuf->st_size = stub->hdr.len;
 
-    stub_close(stub);
+    stub_close(state, stub);
     return 0;
 }
 
@@ -670,7 +292,7 @@ static int undup_open(const char *path, struct fuse_file_info *fi)
         return -EINVAL;
     }
 
-    stub = stub_open(b, openmode);
+    stub = stub_open(state, b, openmode);
     if (!stub)
         return -errno;
 
@@ -683,7 +305,7 @@ static int undup_release(const char *path, struct fuse_file_info *fi)
     int n;
     struct stub *stub = (struct stub *)fi->fh;
 
-    n = stub_close(stub);
+    n = stub_close(state, stub);
 
     return n < 0 ? -errno : n;
 }
@@ -716,33 +338,13 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
 
     close(n);
     // XXX whatta hack, do a stub_create() or something
-    stub = stub_open(b, O_RDWR);
+    stub = stub_open(state, b, O_RDWR);
     if (!stub)
         return -errno;
 
     fi->fh = (intptr_t)stub;
 
     return 0;
-}
-
-
-void count_maybe_dump(double t)
-{
-    static double last_t;
-    double t0, t1;
-
-    if (!f_stats) return;
-    if (t < last_t + 1) return;
-
-    t0 = rtc();
-
-    last_t = t;
-
-    fprintf(f_stats, "%.3f\n", t);
-    count_print_stats(f_stats);
-    fflush(f_stats);
-    t1 = rtc();
-    fprintf(f_stats, "stats output took %.6f\n", t1 - t0);
 }
 
 static int undup_read(const char *path, char *buf, size_t size, off_t offset,
@@ -766,107 +368,11 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     debug("undup_read off=%lld size=%d path=%s len=%lld\n",
           (long long)offset, (int)size, path, (long long)stub->hdr.len);
 
-    ret = stub_read(stub, buf, size, offset);
+    ret = stub_read(state, stub, buf, size, offset);
     debug("undup_read return %d errno=%d\n", ret, errno);
     t1 = rtc();
     count_event(COUNT_READ, t1 - t0, size);
-    count_maybe_dump(t1);
-    return ret;
-}
-
-/*
- * Writes the block BLK to file STUBFD at offset BLKOFF with hash HASH.
- * BLK must be of size state->blksz, BLKOFF must be naturally aligned,
- * and HASH must be the hash of BLK.
- *
- * Since STUBFD is a "stub file" (see DESIGN for details), and we have already
- * established that HASH is not present in the bucket, a write consists of
- *  - write BLOCK and HASH to the bucket.
- *  - write HASH to the appropriate spot in the stub file.
- *  - update undup_hdr.len if necessary.
- *
- * returns 0 on success, or -errno on failure.
- */
-static int write_block(struct stub *stub, off_t blkoff, const u8 *blk,
-                       int blklen, u8 *hash)
-{
-    off_t hashidx = blkoff >> state->blkshift;
-    off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
-    int n;
-
-    ASSERT((blkoff & (state->blksz-1)) == 0);
-
-    debug("write_block off=%lld hash=%02x%02x%02x%02x\n",
-          (long long)blkoff, hash[0], hash[1], hash[2], hash[3], hash[4]);
-
-    memcpy(state->hashblock + state->hbpos, hash, state->hashsz);
-    state->hbpos += state->hashsz;
-    n = pwrite(state->fd, blk, state->blksz, state->bucketlen);
-    if (n == -1)
-        return -errno;
-    if (n < state->blksz)
-        return -EIO;
-    state->bucketlen += state->blksz;
-    ASSERT(state->hbpos <= state->blksz);
-    if (state->hbpos == state->blksz) {
-        n = pwrite(state->fd, state->hashblock, state->blksz, state->bucketlen);
-        if (n == -1)
-            return -errno;
-        if (n < state->blksz)
-            return -EIO;
-        state->hbpos = 0;
-        state->bucketlen += state->blksz;
-    }
-    n = pwrite(stub->fd, hash, state->hashsz, hashpos);
-    if (n == -1)
-        return -errno;
-    if (n < state->hashsz)
-        return -EIO;
-
-    return 0;
-}
-
-static void do_hash(void *hash, const void *buf, int n)
-{
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, buf, n);
-    SHA256_Final(hash, &ctx);
-}
-
-static int stub_write(struct stub *stub, const void *buf, size_t n, off_t off)
-{
-    u8 hash[HASH_MAX];
-    int ret = 0;
-    int datafd = -1;
-    off_t datapos = -1;
-
-    ASSERT(n == HASH_BLOCK);
-
-    do_hash(hash, buf, n);
-    ret = lookup_hash(hash, &datafd, &datapos);
-    debug("loookup_hash got %d %d %lld n=%d\n",
-          ret, datafd, datapos, (int)n);
-    if (ret == -1)
-        goto out;
-    if (ret == 0) {
-        // not found, write new block to bucket, write hash to stubfile
-        ret = write_block(stub, off, buf, state->blksz, hash);
-        goto out;
-    } else {
-        off_t hashidx = off >> state->blkshift;
-        off_t hashpos = sizeof(struct undup_hdr) + hashidx * state->hashsz;
-
-        // found; optionally read+verify data, write hash
-        ret = pwrite(stub->fd, hash, state->hashsz, hashpos);
-        if (ret == -1)
-            goto out;
-        if (ret < state->hashsz) {
-            errno = EIO;
-            goto out;
-        }
-    }
-out:
+    count_maybe_dump(state, t1);
     return ret;
 }
 
@@ -902,7 +408,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
             ret = -ENOMEM;
             goto out_close;
         }
-        ret = stub_read(stub, fillbuf, state->blksz, blkoff);
+        ret = stub_read(state, stub, fillbuf, state->blksz, blkoff);
         if (ret == -1)
             goto out_close;
 
@@ -914,7 +420,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
 
         debug("  prefix write i=%d n=%d blkoff=%lld offset=%lld\n",
                 i, n, (long long)blkoff, (long long)offset);
-        ret = stub_write(stub, fillbuf, state->blksz, blkoff);
+        ret = stub_write(state, stub, fillbuf, state->blksz, blkoff);
         if (ret == -1) {
             goto out_close;
         }
@@ -930,7 +436,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
         if (n > state->blksz) n = state->blksz;
         debug("  write block i=%d n=%d nwrite=%d offset=%lld\n",
                 i, n, nwrite, (long long)offset);
-        stub_write(stub, buf + i, n, offset + i);
+        stub_write(state, stub, buf + i, n, offset + i);
         nwrite += n;
         debug("  end block nwrite=%d n=%d\n", nwrite, n);
     }
@@ -946,7 +452,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
             goto out;
         }
 
-        ret = stub_read(stub, fillbuf, state->blksz, blkoff);
+        ret = stub_read(state, stub, fillbuf, state->blksz, blkoff);
         if (ret < 0) {
             debug("stub_read failed! write bail.\n");
             goto out;
@@ -964,7 +470,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
         memcpy(fillbuf, buf + i, n);
         if (n < state->blksz)
             memset(fillbuf + n, 0, state->blksz - n);
-        ret = stub_write(stub, fillbuf, state->blksz, blkoff);
+        ret = stub_write(state, stub, fillbuf, state->blksz, blkoff);
         if (ret == -1) {
             goto out;
         }
@@ -977,7 +483,7 @@ out_close:
     free(fillbuf);
     t1 = rtc();
     count_event(COUNT_WRITE, t1 - t0, size);
-    count_maybe_dump(t1);
+    count_maybe_dump(state, t1);
     debug("undup_write ret=%d n=%d errno=%d\n", ret, n, errno);
     return ret == -1 ? -errno : ret < 0 ? ret : n;
 }
