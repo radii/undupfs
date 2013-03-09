@@ -166,6 +166,37 @@ static int dumpstub(int argc, char **argv)
 
 static int dumpbucket(int argc, char **argv)
 {
+    int i, j, n;
+    u8 buf[HASH_BLOCK];
+    struct undup_state *state;
+    int nhash;
+    
+    state = debug_init(argv[0]);
+    if (!state) die("%s: %s\n", argv[0], strerror(errno));
+
+    nhash = HASH_BLOCK / state->hashsz;
+
+    printf("%s hashsz=%d blksz=%d fd=%d len=%lld\n",
+            state->basedir, state->hashsz, state->blksz,
+            (long long)state->bucketlen);
+
+    for (i=0; ; i++) {
+        off_t blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
+
+        n = pread(state->fd, buf, HASH_BLOCK, blkpos);
+        if (n == 0) break;
+        if (n == -1) die("dumpbucket: pread: %s\n", strerror(errno));
+        if (n < HASH_BLOCK)
+            die("dumpbucket: short read: %d at %lld\n", n, (long long)blkpos);
+
+        for (j=0; j<nhash; j++) {
+            printf("%-9lld ", i * nhash + j);
+            print_hash(stdout, buf + j * state->hashsz, state->hashsz);
+            printf("\n");
+        }
+    }
+
+
     return 0;
 }
 
