@@ -13,11 +13,13 @@ printf "%4100d\n" 44 > $d/oneplus || fail
 printf "%4100d\n" 44 | cmp -s - $d/oneplus || fail
 
 test "write a block, close it, append a block"
+rm -f $d/appendblock || fail
 printf "%4095d\n" 32 > $d/appendblock || fail
 printf "%4095d\n" 35 >> $d/appendblock || fail
 printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/appendblock || fail
 
 test "rewrite a 2-block file"
+rm -f $d/rewriteblock || fail
 printf "%4095d\n" 32 > $d/rewriteblock || fail
 printf "%4095d\n" 35 >> $d/rewriteblock || fail
 printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/rewriteblock || fail
@@ -25,6 +27,7 @@ printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/rewriteblock || fail
 printf "%4095d\n%4095d\n" 42 45 | cmp -s - $d/rewriteblock || fail
 
 test "write a block, close it, append a short string"
+rm -f $d/appendshort || fail
 printf "%4095d\n" 12 > $d/appendshort || fail
 printf "%100d\n" 13 >> $d/appendshort || fail
 printf "%4095d\n%100d\n" 12 13 | cmp -s - $d/appendshort || fail
