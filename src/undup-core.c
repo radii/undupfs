@@ -49,7 +49,9 @@ struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr
         errno = EIO;
         goto err;
     }
-    debug("stub_open(%s) = %p\n", stubpath, stub);
+    debug("stub_open(%s) = %p magic=0x%x version=%d flags=0x%x\n",
+            stubpath, stub, stub->hdr.magic, stub->hdr.version,
+            stub->hdr.flags);
 
     return stub;
 err:
@@ -283,6 +285,9 @@ free_error:
                     state->nblooms = newn;
                     for (j = 0; j < nhash; j++) {
                         void *p = buf + j * state->hashsz;
+                        u8 *b = p;
+                        debug("insert i=%d j=%d %02x%02x%02x%02x\n",
+                                i, j, b[0], b[1], b[2], b[3]);
                         bloom_insert(state->bp0, state->bloom0[i], p);
                         bloom_insert(state->bp1, state->bloom1[i / state->bloomscale], p);
                     }
