@@ -189,6 +189,8 @@ static int dumpbucket(int argc, char **argv)
         if (n < HASH_BLOCK)
             die("dumpbucket: short read: %d at %lld\n", n, (long long)blkpos);
 
+        printf("TOC %d at %lld (0x%llx):\n", i,
+                (long long)blkpos, (long long)blkpos);
         for (j=0; j<nhash; j++) {
             printf("%-9lld ", i * nhash + j);
             print_hash(stdout, buf + j * state->hashsz, state->hashsz);
