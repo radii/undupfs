@@ -21,7 +21,7 @@ struct stub {
 #define UNDUPFS_DIRECT_CONTENT 0x01
 
 #define HASH_MAX (512 / 8) /* SHA-512 */
-#define HASH_BLOCK 4096
+#define HASH_BLOCK 4096LL
 
 #define UNDUP_HDR_SIZE sizeof(struct undup_hdr)
 
