@@ -235,7 +235,7 @@ static int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t
                         hash[0], hash[1], hash[2], hash[3], i, state->nblooms);
             }
 
-            blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
+            blkpos = HASH_BLOCK * ((i + 1) * (nhash + 1));
             n = pread(state->fd, buf, HASH_BLOCK, blkpos);
             debug("lookup_hash pos=%lld n=%d\n", (long long)blkpos, n);
             if (n == 0)
