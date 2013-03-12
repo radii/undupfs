@@ -35,5 +35,6 @@ void count_maybe_dump(struct undup_state *state, double t);
 
 int bucket_validate(struct undup_state *state);
 int stub_update_len(struct stub *stub, off_t newlen);
+void do_hash(void *hash, const void *buf, int n);
 
 #endif // UNDUP_CORE_H

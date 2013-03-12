@@ -156,7 +156,7 @@ static int dumpstub(int argc, char **argv)
             die("%s: early EOF at %lld (got %d of %d0\n",
                     fname, (long long)pos, n, state->hashsz);
 
-        printf("%-9lld ", (long long)i);
+        printf("%-8lld ", (long long)i);
         print_hash(stdout, hash, state->hashsz);
         printf("\n");
     }
@@ -169,7 +169,9 @@ static int dumpbucket(int argc, char **argv)
     int i, j, n;
     u8 buf[HASH_BLOCK];
     struct undup_state *state;
-    int nhash;
+    int nhash, ntoc;
+    struct stat st;
+    off_t flen, blkpos;
     
     state = debug_init(argv[0]);
     if (!state) die("%s: %s\n", argv[0], strerror(errno));
@@ -181,7 +183,7 @@ static int dumpbucket(int argc, char **argv)
             (long long)state->bucketlen);
 
     for (i=0; ; i++) {
-        off_t blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
+        blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
 
         n = pread(state->fd, buf, HASH_BLOCK, blkpos);
         if (n == 0) break;
@@ -192,13 +194,39 @@ static int dumpbucket(int argc, char **argv)
         printf("TOC %d at %lld (0x%llx):\n", i,
                 (long long)blkpos, (long long)blkpos);
         for (j=0; j<nhash; j++) {
-            printf("%-9lld ", i * nhash + j);
+            printf("%-8lld ", i * nhash + j);
             print_hash(stdout, buf + j * state->hashsz, state->hashsz);
             printf("\n");
         }
     }
+    ntoc = i - 1;
+    if (fstat(state->fd, &st) == -1)
+        die("fstat: %s\n", strerror(errno));
+    flen = st.st_size;
 
+    blkpos = (off_t)HASH_BLOCK * ((ntoc + 1) * (nhash + 1));
+    if (blkpos + HASH_BLOCK < flen) {
+        int nbyte = flen - (blkpos + HASH_BLOCK);
+        int nblock = nbyte / HASH_BLOCK;
 
+        printf("%d blocks (%d bytes) remaining after TOC %d\n",
+                nblock, nbyte, ntoc);
+        for (i = 0; i < nblock; i ++) {
+            off_t pos = blkpos + i * HASH_BLOCK;
+            u8 hash[state->hashsz];
+            int blknum = (ntoc + 1) * nhash + i;
+
+            n = pread(state->fd, buf, HASH_BLOCK, pos);
+            if (n == 0) break;
+            if (n == -1) die("dumpbucket: pread: %s\n", strerror(errno));
+            if (n < HASH_BLOCK)
+                die("dumpbucket: short read: %d at %lld\n", n, (long long)pos);
+            do_hash(hash, buf, n);
+            printf("%-8lld ", (long long)blknum);
+            print_hash(stdout, hash, state->hashsz);
+            printf("\n");
+        }
+    }
     return 0;
 }
 

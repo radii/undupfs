@@ -465,7 +465,7 @@ int stub_write_block(struct undup_state *state, struct stub *stub,
     return 0;
 }
 
-static void do_hash(void *hash, const void *buf, int n)
+void do_hash(void *hash, const void *buf, int n)
 {
     SHA256_CTX ctx;
     SHA256_Init(&ctx);
