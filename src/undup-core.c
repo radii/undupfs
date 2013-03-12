@@ -410,6 +410,13 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
  */
 int bucket_validate(struct undup_state *state)
 {
+    int chunksz = state->blksz * (1 + (state->blksz / state->hashsz));
+    int ntailbyte = (state->bucketlen - state->blksz) % chunksz;
+    int ntailblk = ntailbyte / state->blksz;
+
+    debug("bucket_validate len=%lld hbpos=%d (%d bytes in tail = %d blocks) %d blocks total%s\n",
+            state->bucketlen, state->hbpos, ntailbyte, ntailblk, 0,
+            ntailbyte % state->blksz == 0 ? "" : " (MISALIGNED)");
     return 0;
 }
 
