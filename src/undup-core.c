@@ -397,6 +397,15 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
     return tot;
 }
 
+static int all_zeros(u8 *buf, int n)
+{
+    int i;
+
+    for (i=0; i<n; i++)
+        if (buf[i] != 0) return 0;
+    return 1;
+}
+
 /*
  * Validate the bucket described by STATE.  This includes adjusting fields
  * such as state->bucketlen so that future blocks go to the right place,
@@ -413,10 +422,33 @@ int bucket_validate(struct undup_state *state)
     int chunksz = state->blksz * (1 + (state->blksz / state->hashsz));
     int ntailbyte = (state->bucketlen - state->blksz) % chunksz;
     int ntailblk = ntailbyte / state->blksz;
+    int i, n, nzero;
+    u8 buf[state->blksz], *hash;
 
     debug("bucket_validate len=%lld hbpos=%d (%d bytes in tail = %d blocks) %d blocks total%s\n",
             state->bucketlen, state->hbpos, ntailbyte, ntailblk, 0,
             ntailbyte % state->blksz == 0 ? "" : " (MISALIGNED)");
+
+    if (ntailbyte == 0) return 0;
+
+    for (i = nzero = 0; ; i++) {
+        off_t pos = state->bucketlen - ntailbyte + i * state->blksz;
+
+        n = pread(state->fd, buf, state->blksz, pos);
+        if (n == 0) break;
+        if (n == -1)
+            die("bucket_validate: pread(%d, %lld) = %d (%d '%s')\n",
+                    state->blksz, (long long)pos, n, errno, strerror(errno));
+        if (all_zeros(buf, state->blksz))
+            nzero++;
+        else
+            nzero = 0;
+        hash = &state->hashblock[i * state->hashsz];
+        do_hash(hash, buf, n);
+    }
+
+    state->hbpos = i * state->hashsz;
+
     return 0;
 }
 
