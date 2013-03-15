@@ -38,4 +38,8 @@ int bucket_validate(struct undup_state *state);
 int stub_update_len(struct stub *stub, off_t newlen);
 void do_hash(void *hash, const void *buf, int n);
 
+void state_rdlock(struct undup_state *state);
+void state_wrlock(struct undup_state *state);
+void state_unlock(struct undup_state *state);
+
 #endif // UNDUP_CORE_H
