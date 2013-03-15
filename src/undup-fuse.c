@@ -22,6 +22,8 @@
 #include <dirent.h>
 #include <sys/time.h>
 
+#include <pthread.h>
+
 #include <openssl/sha.h>
 
 #include "core.h"
@@ -512,7 +514,7 @@ static struct fuse_operations undup_oper = {
 static int undup_init(const char *basedir)
 {
     char fname[PATH_MAX];
-    int fd, n, ver;
+    int fd, n, ver, e;
     off_t flen;
     struct stat st;
     struct undup_hdr hdr;
@@ -568,6 +570,9 @@ static int undup_init(const char *basedir)
 
     state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
     state->bp1 = bloom_setup(filtersz1, bitcount, state->hashsz);
+
+    if ((e = pthread_rwlock_init(&state->lock, 0)) != 0)
+        die("pthread_rwlock_init: %s\n", strerror(e));
 
     bucket_validate(state);
 

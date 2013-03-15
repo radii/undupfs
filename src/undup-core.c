@@ -20,12 +20,38 @@
 #include <dirent.h>
 #include <sys/time.h>
 
+#include <pthread.h>
+
 #include <openssl/sha.h>
 
 #include "shared.h"
 #include "core.h"
 #include "undupfs.h"
 #include "bloom.h"
+
+void state_rdlock(struct undup_state *state)
+{
+    int e;
+
+    if ((e = pthread_rwlock_rdlock(&state->lock)) != 0)
+        die("pthread_rwlock_rdlock: %s\n", strerror(e));
+}
+
+void state_wrlock(struct undup_state *state)
+{
+    int e;
+
+    if ((e = pthread_rwlock_wrlock(&state->lock)) != 0)
+        die("pthread_rwlock_wrlock: %s\n", strerror(e));
+}
+
+void state_unlock(struct undup_state *state)
+{
+    int e;
+
+    if ((e = pthread_rwlock_unlock(&state->lock)) != 0)
+        die("pthread_rwlock_unlock: %s\n", strerror(e));
+}
 
 struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr)
 {
@@ -366,10 +392,11 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
 
     tot = 0;
     while (size > 0) {
+        state_rdlock(state);
         ret = stub_get_hash(state, stub, offset, hash);
-        if (ret == -1)
-            return -1;
-        ret = lookup_hash(state, hash, &datafd, &datapos);
+        if (ret != -1)
+            ret = lookup_hash(state, hash, &datafd, &datapos);
+        state_unlock(state);
         debug("lookup got %d %d %lld\n", ret, datafd, datapos);
         if (ret == -1)
             return -1;
@@ -523,6 +550,9 @@ int stub_write(struct undup_state *state, struct stub *stub, const void *buf, si
     ASSERT(n == HASH_BLOCK);
 
     do_hash(hash, buf, n);
+
+    state_wrlock(state);
+
     ret = lookup_hash(state, hash, &datafd, &datapos);
     debug("loookup_hash got %d %d %lld n=%d\n",
           ret, datafd, datapos, (int)n);
@@ -546,5 +576,6 @@ int stub_write(struct undup_state *state, struct stub *stub, const void *buf, si
         }
     }
 out:
+    state_unlock(state);
     return ret;
 }

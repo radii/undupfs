@@ -1,4 +1,4 @@
-CFLAGS := -O2 -g -W -Wall -Wno-sign-compare -Wno-unused-parameter $(shell pkg-config fuse --cflags)
+CFLAGS := -O2 -g -W -Wall -Wno-sign-compare -Wno-unused-parameter -pthread $(shell pkg-config fuse --cflags)
 LDFLAGS := $(shell pkg-config fuse --libs) -lssl
 
 targets := undup-fuse undupfs-debug

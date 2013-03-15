@@ -20,6 +20,7 @@ struct undup_state {
     u8 **bloom1;
     int nblooms;
     int bloomscale;
+    pthread_rwlock_t lock;
 };
 
 extern FILE *f_debug;
