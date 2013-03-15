@@ -309,8 +309,8 @@ free_error:
                 }
             }
             count_event(COUNT_BLOOM_FP0, 0, 1);
-            count_event(COUNT_BLOOM_FP1, 0, 1);
         }
+        count_event(COUNT_BLOOM_FP1, 0, 1);
     }
 out:
     for (j = 0; j < state->hbpos / hashsz; j++) {
@@ -448,6 +448,8 @@ int bucket_validate(struct undup_state *state)
     }
 
     state->hbpos = i * state->hashsz;
+
+    debug("bucket_validate hbpos=%d i=%d\n", state->hbpos, i);
 
     return 0;
 }
