@@ -180,7 +180,7 @@ static int dumpbucket(int argc, char **argv)
 
     printf("%s hashsz=%d blksz=%d fd=%d len=%lld\n",
             state->basedir, state->hashsz, state->blksz,
-            (long long)state->bucketlen);
+            state->fd, (long long)state->bucketlen);
 
     for (i=0; ; i++) {
         blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
@@ -194,7 +194,7 @@ static int dumpbucket(int argc, char **argv)
         printf("TOC %d at %lld (0x%llx):\n", i,
                 (long long)blkpos, (long long)blkpos);
         for (j=0; j<nhash; j++) {
-            printf("%-8lld ", i * nhash + j);
+            printf("%-8lld ", (long long)i * nhash + j);
             print_hash(stdout, buf + j * state->hashsz, state->hashsz);
             printf("\n");
         }
