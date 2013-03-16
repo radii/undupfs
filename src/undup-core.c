@@ -243,7 +243,7 @@ static int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t
         count_event(COUNT_BLOOM_QUERY1, 0, 1);
         if (h < state->nblooms / state->bloomscale &&
                 state->bloom1[h] &&
-                !bloom_present(state->bp1, state->bloom0[h], hash)) {
+                !bloom_present(state->bp1, state->bloom1[h], hash)) {
             debug("%02x%02x%02x%02x bloom1 %d/%d miss\n",
                     hash[0], hash[1], hash[2], hash[3], h, state->nblooms / state->bloomscale);
             continue;
