@@ -44,7 +44,8 @@ int bloom_present(struct bloom_params *p, const u8 *b, const u8 *key);
 
 /* Dump debug info about bloom filter B under params P to F.
  */
-void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f);
+void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f, const u8 *key);
+
 
 /* Returns weight (number of bits set) of bloom filter B.
  */

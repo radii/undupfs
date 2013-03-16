@@ -206,13 +206,25 @@ int bloom_weight(struct bloom_params *p, const u8 *b)
     return w;
 }
 
-void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f)
+void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f, const u8 *key)
 {
     int i;
     int w = bloom_weight(p, b);
+    int m = -1;
 
-    fprintf(f, "%p weight %d/%d (%.2f%%)\n",
-            b, w, p->size, 100.0 * w / p->size);
+    if (key) {
+        m = 0;
+        for (i=0; i<p->nbit; i++) {
+            int x = get_bits(key, i * p->bitperf, p->bitperf) % p->size;
+            if (get_bit(b, x) == 0)
+                m++;
+        }
+        m = p->nbit - m;
+    }
+
+    fprintf(f, "%p weight %d/%d (%.2f%%) m=%d/%d %02x%02x%02x%02x\n",
+            b, w, p->size, 100.0 * w / p->size, m, p->nbit,
+            key[0], key[1], key[2], key[3]);
     for (i=0; i<p->bytesize; i++) {
         fprintf(f, "%02x%s", b[i], (i % 16 == 15) ? "\n" : "  " + (i % 8 != 7));
     }

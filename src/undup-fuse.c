@@ -374,7 +374,9 @@ static int undup_read(const char *path, char *buf, size_t size, off_t offset,
     debug("undup_read return %d errno=%d\n", ret, errno);
     t1 = rtc();
     count_event(COUNT_READ, t1 - t0, size);
+    state_wrlock(state);
     count_maybe_dump(state, t1);
+    state_unlock(state);
     return ret;
 }
 

@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 
 #include <pthread.h>
 
@@ -136,6 +137,100 @@ static int stub_get_hash(struct undup_state *state, struct stub *stub, off_t off
     return 0;
 }
 
+void print_hash(FILE *f, const u8 *buf, int n)
+{
+    int i;
+
+    for (i=0; i<n; i++)
+        fprintf(f, "%02x", buf[i]);
+}
+
+int dumptocs(FILE *f, struct undup_state *state)
+{
+    int i, j, n; 
+    u8 buf[HASH_BLOCK]; 
+    struct stat st; 
+    int ntoc, nhash;
+    off_t flen, blkpos; 
+    u8 b0[state->bp0->bytesize];
+    u8 b1[state->bp1->bytesize];
+
+    nhash = HASH_BLOCK / state->hashsz; 
+
+    bloom_init(state->bp0, b0);
+    bloom_init(state->bp1, b1);
+
+    for (i=0; ; i++) {
+        blkpos = (off_t)HASH_BLOCK * ((i + 1) * (nhash + 1));
+
+        n = pread(state->fd, buf, HASH_BLOCK, blkpos);
+        if (n == 0) break;
+        if (n == -1) die("dumpbucket: pread: %s\n", strerror(errno));
+        if (n < HASH_BLOCK)
+            die("dumpbucket: short read: %d at %lld\n", n, (long long)blkpos);
+
+        fprintf(f, "TOC %d at %lld (0x%llx):\n", i,
+                (long long)blkpos, (long long)blkpos);
+        for (j=0; j<nhash; j++) {
+            u8 *p = buf + j * state->hashsz;
+
+            bloom_insert(state->bp0, b0, p);
+            bloom_insert(state->bp1, b1, p);
+
+            fprintf(f, "%-8lld ", (long long)i * nhash + j);
+            print_hash(f, p, state->hashsz);
+            fprintf(f, "\n");
+        }
+        bloom_dump(state->bp0, b0, f, buf);
+        bloom_init(state->bp0, b0);
+
+        fprintf(f, "b1 at %d:\n", i);
+        bloom_dump(state->bp1, b1, f, buf);
+
+        if (i % state->bloomscale == state->bloomscale - 1) {
+            fprintf(f, "b1 at %d:\n", i);
+            bloom_dump(state->bp1, b1, f, buf);
+            bloom_init(state->bp1, b1);
+        }
+    }
+    ntoc = i - 1;
+    if (fstat(state->fd, &st) == -1)
+        die("fstat: %s\n", strerror(errno));
+    flen = st.st_size;
+
+    blkpos = (off_t)HASH_BLOCK * ((ntoc + 1) * (nhash + 1));
+    if (blkpos + HASH_BLOCK < flen) {
+        int nbyte = flen - (blkpos + HASH_BLOCK);
+        int nblock = nbyte / HASH_BLOCK;
+
+        fprintf(f, "%d blocks (%d bytes) remaining after TOC %d\n",
+                nblock, nbyte, ntoc);
+        for (i = 0; i < nblock; i ++) {
+            off_t pos = blkpos + i * HASH_BLOCK;
+            u8 hash[state->hashsz];
+            int blknum = (ntoc + 1) * nhash + i;
+
+            n = pread(state->fd, buf, HASH_BLOCK, pos);
+            if (n == 0) break;
+            if (n == -1) die("dumpbucket: pread: %s\n", strerror(errno));
+            if (n < HASH_BLOCK)
+                die("dumpbucket: short read: %d at %lld\n", n, (long long)pos);
+            do_hash(hash, buf, n);
+            fprintf(f, "%-8lld ", (long long)blknum);
+            print_hash(f, hash, state->hashsz);
+            fprintf(f, "\n");
+        }
+    }
+    return ntoc;
+}
+
+static void dump_tables(struct undup_state *state, const u8 *hash)
+{
+    if (f_debug == NULL) return;
+
+    dumptocs(f_debug, state);
+}
+
 static void dump_blooms(struct undup_state *state, const u8 *hash)
 {
     int i;
@@ -145,12 +240,12 @@ static void dump_blooms(struct undup_state *state, const u8 *hash)
     for (i=0; i<state->nblooms; i++) {
         debug("bloom0[%d] = %p\n", i, state->bloom0[i]);
         if (state->bloom0[i])
-            bloom_dump(state->bp0, state->bloom0[i], f_debug);
+            bloom_dump(state->bp0, state->bloom0[i], f_debug, hash);
     }
     for (i=0; i<state->nblooms / state->bloomscale; i++) {
         debug("bloom1[%d] = %p\n", i, state->bloom1[i]);
         if (state->bloom1[i])
-            bloom_dump(state->bp1, state->bloom1[i], f_debug);
+            bloom_dump(state->bp1, state->bloom1[i], f_debug, hash);
     }
     fflush(f_debug);
 }
@@ -318,6 +413,7 @@ free_error:
                         bloom_insert(state->bp1, state->bloom1[i / state->bloomscale], p);
                     }
                 }
+                dump_blooms(state, hash);
             }
 
             for (j = 0; j < nhash; j++) {
@@ -401,7 +497,10 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
         if (ret == -1)
             return -1;
         if (ret == 0) {
+            state_wrlock(state);
+            dump_tables(state, hash);
             dump_blooms(state, hash);
+            state_unlock(state);
             errno = EIO;
             return -1;
         }
