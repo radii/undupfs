@@ -493,7 +493,7 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
         if (ret != -1)
             ret = lookup_hash(state, hash, &datafd, &datapos);
         state_unlock(state);
-        debug("lookup got %d %d %lld\n", ret, datafd, datapos);
+        debug("lookup got %d %d %lld\n", ret, datafd, (long long)datapos);
         if (ret == -1)
             return -1;
         if (ret == 0) {
@@ -551,7 +551,7 @@ int bucket_validate(struct undup_state *state)
     u8 buf[state->blksz], *hash;
 
     debug("bucket_validate len=%lld hbpos=%d (%d bytes in tail = %d blocks) %d blocks total%s\n",
-            state->bucketlen, state->hbpos, ntailbyte, ntailblk, 0,
+            (long long)state->bucketlen, state->hbpos, ntailbyte, ntailblk, 0,
             ntailbyte % state->blksz == 0 ? "" : " (MISALIGNED)");
 
     if (ntailbyte == 0) return 0;
@@ -654,7 +654,7 @@ int stub_write(struct undup_state *state, struct stub *stub, const void *buf, si
 
     ret = lookup_hash(state, hash, &datafd, &datapos);
     debug("loookup_hash got %d %d %lld n=%d\n",
-          ret, datafd, datapos, (int)n);
+          ret, datafd, (long long)datapos, (int)n);
     if (ret == -1)
         goto out;
     if (ret == 0) {

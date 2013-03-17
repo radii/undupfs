@@ -406,7 +406,8 @@ static int undup_write(const char *path, const char *buf, size_t size,
     if ((i = offset % state->blksz) > 0) {
         off_t blkoff = offset - i;
 
-        debug("  offset fill i=%d off=%lld blkoff=%lld\n", i, offset, blkoff);
+        debug("  offset fill i=%d off=%lld blkoff=%lld\n", i, (long long)offset,
+                (long long)blkoff);
         fillbuf = malloc(state->blksz);
         if (!fillbuf) {
             ret = -ENOMEM;
@@ -432,17 +433,18 @@ static int undup_write(const char *path, const char *buf, size_t size,
         size -= n;
         buf += n;
         nwrite += n;
-        debug("  end prefix nwrite=%d n=%d off=%lld\n", nwrite, n, (long long)offset);
+        debug("  end prefix nwrite=%d n=%d off=%lld\n", (int)nwrite, n,
+                (long long)offset);
     }
 
     for (i = 0; i + state->blksz <= size; i += state->blksz) {
         n = size - i;
         if (n > state->blksz) n = state->blksz;
         debug("  write block i=%d n=%d nwrite=%d offset=%lld\n",
-                i, n, nwrite, (long long)offset);
+                i, n, (int)nwrite, (long long)offset);
         stub_write(state, stub, buf + i, n, offset + i);
         nwrite += n;
-        debug("  end block nwrite=%d n=%d\n", nwrite, n);
+        debug("  end block nwrite=%d n=%d\n", (int)nwrite, n);
     }
     if (i < size) {
         off_t blkoff = offset + i;
@@ -479,7 +481,8 @@ static int undup_write(const char *path, const char *buf, size_t size,
             goto out;
         }
         nwrite += n;
-        debug("  end tail nwrite=%d n=%d off=%lld\n", nwrite, n, (long long)offset);
+        debug("  end tail nwrite=%d n=%d off=%lld\n", (int)nwrite, n,
+                (long long)offset);
     }
 out:
     stub_update_len(stub, orig_offset + nwrite);
