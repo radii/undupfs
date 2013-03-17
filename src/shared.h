@@ -17,8 +17,8 @@ double rtc(void);
 extern int o_verbose;
 extern FILE *f_debug;
 
-void verbose(char *fmt, ...);
-void debug(char *fmt, ...);
+void verbose(char *fmt, ...) __attribute__((format (printf, 1, 2)));
+void debug(char *fmt, ...) __attribute__((format (printf, 1, 2)));
 
 void count_event(int event, double elapsed, int val);
 void count_stats(FILE *f);
