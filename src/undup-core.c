@@ -612,7 +612,7 @@ int stub_write_block(struct undup_state *state, struct stub *stub,
     ASSERT((blkoff & (state->blksz-1)) == 0);
 
     debug("write_block off=%lld hash=%02x%02x%02x%02x\n",
-          (long long)blkoff, hash[0], hash[1], hash[2], hash[3], hash[4]);
+          (long long)blkoff, hash[0], hash[1], hash[2], hash[3]);
 
     memcpy(state->hashblock + state->hbpos, hash, state->hashsz);
     state->hbpos += state->hashsz;
