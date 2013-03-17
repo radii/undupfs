@@ -335,12 +335,15 @@ static int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t
     int nhash = HASH_BLOCK / hashsz;
 
     for (h = 0; ; h++) {
+        int nbloom1 = state->nblooms / state->bloomscale;
+
         count_event(COUNT_BLOOM_QUERY1, 0, 1);
-        if (h < state->nblooms / state->bloomscale &&
+        if (h < nbloom1 &&
+                state->bloom1 &&
                 state->bloom1[h] &&
                 !bloom_present(state->bp1, state->bloom1[h], hash)) {
             debug("%02x%02x%02x%02x bloom1 %d/%d miss\n",
-                    hash[0], hash[1], hash[2], hash[3], h, state->nblooms / state->bloomscale);
+                    hash[0], hash[1], hash[2], hash[3], h, nbloom1);
             continue;
         }
         for (i = h * state->bloomscale; i < (h + 1) * state->bloomscale ; i++) {
@@ -370,18 +373,24 @@ static int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t
 
             if (i >= state->nblooms || !state->bloom0[i]) {
                 int newn = i + 1;
+                int i1 = i / state->bloomscale;
+                int newn1 = newn / state->bloomscale + 2;
+
                 u8 **newblooms0 = realloc(state->bloom0, newn * sizeof *state->bloom0);
                 u8 **newblooms1 = 0;
                 u8 *newbloom0 = malloc(state->bp0->bytesize); // XXX
                 u8 *newbloom1 = 0;
 
                 if (!state->bloom1 ||
-                        newn / state->bloomscale >= i / state->bloomscale) {
-                    newblooms1 = realloc(state->bloom1, newn / state->bloomscale * sizeof *state->bloom1 + 1);
+                        i1 > state->nblooms / state->bloomscale ||
+                        !state->bloom1[i1]) {
+                    newblooms1 = realloc(state->bloom1,
+                            newn1 * sizeof *state->bloom1);
                     newbloom1 = malloc(state->bp1->bytesize); // XXX
                     if (!newblooms1 || !newbloom1)
                         goto free_error;
                 }
+
                 if (!newblooms0 || !newbloom0) {
 free_error:
                     free(newblooms0);
@@ -391,16 +400,17 @@ free_error:
                 } else {
                     for (j = state->nblooms; j < i; j++)
                         newblooms0[j] = NULL;
-                    for (j = state->nblooms / state->bloomscale;
-                            j < i / state->bloomscale; j++) {
-                        newblooms1[j] = NULL;
+                    if (newblooms1) {
+                        for (j = nbloom1; j < newn1; j++) {
+                            newblooms1[j] = NULL;
+                        }
                     }
                     newblooms0[i] = newbloom0;
                     bloom_init(state->bp0, newblooms0[i]);
                     state->bloom0 = newblooms0;
                     if (newblooms1) {
-                        newblooms1[i / state->bloomscale] = newbloom1;
-                        bloom_init(state->bp1, newblooms1[i / state->bloomscale]);
+                        newblooms1[i1] = newbloom1;
+                        bloom_init(state->bp1, newblooms1[i1]);
                         state->bloom1 = newblooms1;
                     }
                     state->nblooms = newn;
@@ -410,7 +420,7 @@ free_error:
                         debug("insert i=%d j=%d %02x%02x%02x%02x\n",
                                 i, j, b[0], b[1], b[2], b[3]);
                         bloom_insert(state->bp0, state->bloom0[i], p);
-                        bloom_insert(state->bp1, state->bloom1[i / state->bloomscale], p);
+                        bloom_insert(state->bp1, state->bloom1[i1], p);
                     }
                 }
                 dump_blooms(state, hash);
