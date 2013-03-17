@@ -219,7 +219,6 @@ void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f, const u8 *key)
             if (get_bit(b, x) == 0)
                 m++;
         }
-        m = p->nbit - m;
     }
 
     fprintf(f, "%p weight %d/%d (%.2f%%) m=%d/%d %02x%02x%02x%02x\n",
