@@ -5,7 +5,7 @@ targets := undup-fuse undupfs-debug
 
 all: $(targets)
 
-%.o: %.c shared.h Makefile
+%.o: %.c bloom.h core.h shared.h undupfs.h Makefile
 	$(CC) $(CFLAGS) -c $< -o $@
 
 undup-fuse: undup-fuse.o undup-core.o util.o bloom.o
