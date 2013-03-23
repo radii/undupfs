@@ -17,11 +17,18 @@
 
 void die(char *fmt, ...)
 {
-    va_list ap;
+    va_list ap, ap2;
 
+    va_copy(ap, ap2);
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
+    if (f_debug) {
+        va_start(ap, fmt);
+        vfprintf(f_debug, fmt, ap);
+        va_end(ap);
+    }
+    *(int *)0 = 42;
     exit(1);
 }
 
