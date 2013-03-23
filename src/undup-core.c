@@ -54,10 +54,27 @@ void state_unlock(struct undup_state *state)
         die("pthread_rwlock_unlock: %s\n", strerror(e));
 }
 
+int stub_refresh(struct undup_state *state, struct stub *stub)
+{
+    int n;
+
+    n = pread(stub->fd, &stub->hdr, sizeof(stub->hdr), 0);
+    if (n == -1)
+        return -1;
+    if (n < sizeof(stub->hdr)) {
+        errno = EIO;
+        return -1;
+    }
+    debug("stub_refresh %p magic=0x%x version=%d flags=0x%x\n",
+            stub, stub->hdr.magic, stub->hdr.version,
+            stub->hdr.flags);
+    return 0;
+}
+
 struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr)
 {
     struct stub *stub = calloc(sizeof *stub, 1);
-    int n, e;
+    int e;
 
     if (!stub) {
        errno = ENOMEM;
@@ -69,17 +86,11 @@ struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr
     stub->fd = open(stubpath, O_RDWR);
     if (stub->fd == -1)
         goto err;
-    n = pread(stub->fd, &stub->hdr, sizeof(stub->hdr), 0);
-    if (n == -1)
+    if (stub_refresh(state, stub) == -1)
         goto err;
-    if (n < sizeof(stub->hdr)) {
-        errno = EIO;
-        goto err;
-    }
     debug("stub_open(%s) = %p magic=0x%x version=%d flags=0x%x\n",
             stubpath, stub, stub->hdr.magic, stub->hdr.version,
             stub->hdr.flags);
-
     return stub;
 err:
     e = errno;

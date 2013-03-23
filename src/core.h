@@ -32,6 +32,8 @@ int stub_close(struct undup_state *state, struct stub *stub);
 int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t size, off_t offset);
 int stub_write(struct undup_state *state, struct stub *stub, const void *buf, size_t n, off_t off);
 
+int stub_refresh(struct undup_state *state, struct stub *stub);
+
 void count_maybe_dump(struct undup_state *state, double t);
 
 int bucket_validate(struct undup_state *state);
