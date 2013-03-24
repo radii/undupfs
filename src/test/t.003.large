@@ -1,0 +1,9 @@
+starttests t.large
+
+test "write 400MB and read it back"
+
+perl -e 'foreach(1..100*1024) { printf("%4095d\n",$_) }' > $d/big || fail
+perl -e 'foreach(1..100*1024) { printf("%4095d\n",$_) }' | \
+    cmp -s - $d/big || fail
+
+endtests t.large
