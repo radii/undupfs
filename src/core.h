@@ -12,7 +12,7 @@ struct undup_state {
     int blkshift;    // the shift for a block (log_2(blksz))
     int fd;          // filedescriptor to bucketfile
     off_t bucketlen; // length of bucketfile
-    char *hashblock; // in-progress block of hashes
+    u8 *hashblock;   // in-progress block of hashes
     int hbpos;       // current position in hashblock
     struct bloom_params *bp0;
     struct bloom_params *bp1;
@@ -39,6 +39,8 @@ void count_maybe_dump(struct undup_state *state, double t);
 int bucket_validate(struct undup_state *state);
 int stub_update_len(struct stub *stub, off_t newlen);
 void do_hash(void *hash, const void *buf, int n);
+int dumptocs(FILE *f, struct undup_state *state);
+void print_hash(FILE *f, const u8 *buf, int n);
 
 void state_rdlock(struct undup_state *state);
 void state_wrlock(struct undup_state *state);

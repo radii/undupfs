@@ -118,7 +118,6 @@ static int dumpstub(int argc, char **argv)
     struct stub *stub;
     struct undup_state *state;
     char *fname;
-    int len;
     off_t i, nhash;
 
     fname = argv[1];
