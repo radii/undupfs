@@ -88,9 +88,9 @@ struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr
         goto err;
     if (stub_refresh(state, stub) == -1)
         goto err;
-    debug("stub_open(%s) = %p magic=0x%x version=%d flags=0x%x\n",
+    debug("stub_open(%s) = %p magic=0x%x version=%d flags=0x%x len=%lld\n",
             stubpath, stub, stub->hdr.magic, stub->hdr.version,
-            stub->hdr.flags);
+            stub->hdr.flags, (long long)stub->hdr.len);
     return stub;
 err:
     e = errno;
