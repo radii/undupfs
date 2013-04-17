@@ -44,7 +44,7 @@ void verbose(char *fmt, ...)
 {
     va_list ap;
 
-    fprintf(f_debug, "[%9.3f] %d ", rtc(), (u32)pthread_self());
+    fprintf(f_debug, "[%9.3f] %u ", rtc(), (u32)pthread_self());
     va_start(ap, fmt);
     vfprintf(f_debug, fmt, ap);
     va_end(ap);
@@ -57,7 +57,7 @@ void debug(char *fmt, ...)
 
     if (!f_debug) return;
 
-    fprintf(f_debug, "[%9.3f] %d ", rtc(), (u32)pthread_self());
+    fprintf(f_debug, "[%9.3f] %u ", rtc(), (u32)pthread_self());
     va_start(ap, fmt);
     vfprintf(f_debug, fmt, ap);
     va_end(ap);
