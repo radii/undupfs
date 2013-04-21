@@ -18,6 +18,12 @@ printf "%4095d\n" 32 > $d/appendblock || fail
 printf "%4095d\n" 35 >> $d/appendblock || fail
 printf "%4095d\n%4095d\n" 32 35 | cmp -s - $d/appendblock || fail
 
+test "write to the middle of a block"
+rm -f $d/editblock || fail
+printf "%4095d\n" 32 > $d/editblock || fail
+printf "aaaaaa" | dd of=$d/editblock bs=1 seek=10 conv=notrunc || fail
+printf '%16s%4079d\n' aaaaaa 32 | cmp -s - $d/editblock || fail
+
 test "rewrite a 2-block file"
 rm -f $d/rewriteblock || fail
 printf "%4095d\n" 32 > $d/rewriteblock || fail
