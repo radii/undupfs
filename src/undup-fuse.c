@@ -430,8 +430,11 @@ static int undup_write(const char *path, const char *buf, size_t size,
         n = state->blksz - i;
         if (n > size) n = size;
         memcpy(fillbuf + i, buf, n);
-        if (i + n < state->blksz)
-            memset(fillbuf + i + n, 0, state->blksz - i - n);
+        if (i + n < state->blksz && ret < state->blksz) {
+            int m = i + n;
+            if (m < ret) m = ret;
+            memset(fillbuf + m, 0, state->blksz - m);
+        }
 
         debug("  prefix write i=%d n=%d blkoff=%lld offset=%lld\n",
                 i, n, (long long)blkoff, (long long)offset);
