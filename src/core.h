@@ -37,7 +37,7 @@ int stub_refresh(struct undup_state *state, struct stub *stub);
 void count_maybe_dump(struct undup_state *state, double t);
 
 int bucket_validate(struct undup_state *state);
-int stub_update_len(struct stub *stub, off_t newlen);
+int stub_update_len(struct stub *stub, off_t newlen, int do_trunc);
 void do_hash(void *hash, const void *buf, int n);
 int dumptocs(FILE *f, struct undup_state *state);
 void print_hash(FILE *f, const u8 *buf, int n);

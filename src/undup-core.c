@@ -111,12 +111,15 @@ int stub_close(struct undup_state *state, struct stub *stub)
     return n == -1 ? -e : 0;
 }
 
-int stub_update_len(struct stub *stub, off_t newlen)
+int stub_update_len(struct stub *stub, off_t newlen, int do_trunc)
 {
     int n;
 
     debug("stub_update_len len=%lld newlen=%lld\n",
           (long long)stub->hdr.len, (long long)newlen);
+
+    if (do_trunc == 0 && newlen <= stub->hdr.len)
+        return 0;
 
     stub->hdr.len = newlen;
     n = pwrite(stub->fd, &stub->hdr.len, sizeof(stub->hdr.len),

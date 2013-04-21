@@ -263,12 +263,22 @@ static int undup_truncate(const char *path, off_t size)
 {
     char b[PATH_MAX+1];
     int n;
+    struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    return n == -1 ? -errno : 0;
+    debug("truncate(%s, %lld)\n", b, (long long)size);
+
+    if (n == -1)
+       return -errno;
+
+    stub = stub_open(state, b, O_RDWR);
+    if (!stub)
+        return -errno;
+
+    return stub_update_len(stub, size, 1);
 }
 
 static int undup_open(const char *path, struct fuse_file_info *fi)
@@ -398,8 +408,8 @@ static int undup_write(const char *path, const char *buf, size_t size,
         return -ENAMETOOLONG;
 
     stub = (struct stub *)fi->fh;
-    debug("undup_write path=%s size=%d offset=%lld fi=%p stub=%p\n", path,
-          (int)size, (long long)offset, fi, stub);
+    debug("undup_write path=%s size=%d offset=%lld fi=%p flags=%x stub=%p\n",
+            path, (int)size, (long long)offset, fi, fi ? (int)fi->flags : 0, stub);
     if (!stub)
         return -EIO;
 
@@ -485,7 +495,7 @@ static int undup_write(const char *path, const char *buf, size_t size,
                 (long long)offset);
     }
 out:
-    stub_update_len(stub, orig_offset + nwrite);
+    stub_update_len(stub, orig_offset + nwrite, 0);
 out_close:
     free(fillbuf);
     t1 = rtc();
@@ -529,6 +539,7 @@ static int undup_init(const char *basedir)
 
     char *f = getenv("UNDUP_DEBUG");
     if (f) {
+        o_verbose = 1;
         f_debug = fopen(f, "w");
     }
     f = getenv("UNDUP_STATS");
