@@ -498,7 +498,11 @@ static int undup_write(const char *path, const char *buf, size_t size,
                 (long long)offset);
     }
 out:
-    stub_update_len(stub, orig_offset + nwrite, 0);
+    if (stub_refresh(state, stub) == -1) {
+        ret = -1;
+    } else {
+        stub_update_len(stub, orig_offset + nwrite, 0);
+    }
 out_close:
     free(fillbuf);
     t1 = rtc();
