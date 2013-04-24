@@ -45,6 +45,8 @@ void verbose(char *fmt, ...)
 {
     va_list ap;
 
+    if (!f_debug) return;
+
     fprintf(f_debug, "[%9.3f] %u ", rtc(), (u32)pthread_self());
     va_start(ap, fmt);
     vfprintf(f_debug, fmt, ap);
