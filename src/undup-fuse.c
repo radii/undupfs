@@ -158,7 +158,7 @@ static int undup_mkdir(const char *path, mode_t mode)
     if (n > PATH_MAX)
         return -ENAMETOOLONG;
 
-    verbose("mkdir(%s, %d)\n", path, mode);
+    debug("mkdir(%s, 0%o)\n", path, mode);
 
     n = mkdir(b, mode);
     return n == -1 ? -errno : n;
