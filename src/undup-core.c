@@ -115,8 +115,8 @@ int stub_update_len(struct stub *stub, off_t newlen, int do_trunc)
 {
     int n;
 
-    debug("stub_update_len len=%lld newlen=%lld\n",
-          (long long)stub->hdr.len, (long long)newlen);
+    debug("stub_update_len %p len=%lld newlen=%lld trunc=%d\n",
+          stub, (long long)stub->hdr.len, (long long)newlen, do_trunc);
 
     if (do_trunc == 0 && newlen <= stub->hdr.len)
         return 0;
