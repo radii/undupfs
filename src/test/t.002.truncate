@@ -30,6 +30,20 @@ printf '%4095d\n' 14;
 printf '%4095d\n' 15;
 printf '%4095d\n' 18) | cmp -s - $d/trunclen || fail
 
+test "repeatedly truncate and rewrite one file"
+n=1000
+for i in `seq 1 $n`; do
+    rm -f $d/foo
+    sh -c "echo foo > $d/foo; echo bar >> $d/foo" &
+    wait
+    if [[ $(stat -c %s $d/foo) -ne 8 ]]; then
+        echo "failed at $i/$n"
+        ls -l $d/foo
+        fail
+        break
+    fi
+done
+
 test "repeatedly truncate and rewrite two files in parallel"
 n=1000
 for i in `seq 1 $n`; do
