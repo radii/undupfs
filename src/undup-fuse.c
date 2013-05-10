@@ -262,7 +262,7 @@ static int undup_rename(const char *from, const char *to)
 static int undup_truncate(const char *path, off_t size)
 {
     char b[PATH_MAX+1];
-    int n;
+    int n, ret;
     struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
@@ -278,7 +278,9 @@ static int undup_truncate(const char *path, off_t size)
     if (!stub)
         return -errno;
 
-    return stub_update_len(stub, size, 1);
+    ret = stub_update_len(stub, size, 1);
+    stub_close(state, stub);
+    return ret;
 }
 
 static int undup_open(const char *path, struct fuse_file_info *fi)
