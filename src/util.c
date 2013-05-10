@@ -29,7 +29,6 @@ void die(char *fmt, ...)
         vfprintf(f_debug, fmt, ap);
         va_end(ap);
     }
-    *(int *)0 = 42;
     exit(1);
 }
 
