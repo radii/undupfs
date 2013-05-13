@@ -322,6 +322,7 @@ static int undup_release(const char *path, struct fuse_file_info *fi)
     debug("undup_release(%s fi=%p stub=%p)\n", path, fi, stub);
 
     n = stub_close(state, stub);
+    fi->fh = 0;
 
     return n < 0 ? -errno : n;
 }

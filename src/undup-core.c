@@ -98,6 +98,7 @@ struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr
 err:
     e = errno;
     close(stub->fd);
+    stub->fd = -1;
     free(stub);
     errno = e;
     return NULL;
@@ -109,6 +110,7 @@ int stub_close(struct undup_state *state, struct stub *stub)
 
     debug("stub_close(%p) fd=%d\n", stub, stub->fd);
     n = close(stub->fd);
+    stub->fd = -1;
     e = errno;
     free(stub);
     return n == -1 ? -e : 0;
