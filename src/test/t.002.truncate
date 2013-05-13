@@ -44,7 +44,6 @@ for i in `seq 1 $n`; do
     fi
 done
 
-if false; then
 test "repeatedly truncate and rewrite two files in parallel"
 n=1000
 for i in `seq 1 $n`; do
@@ -59,7 +58,6 @@ for i in `seq 1 $n`; do
         break
     fi
 done
-fi
 
 test "truncate file to non-blocksize length"
 (
