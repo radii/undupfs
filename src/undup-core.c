@@ -59,15 +59,18 @@ int stub_refresh(struct undup_state *state, struct stub *stub)
     int n;
 
     n = pread(stub->fd, &stub->hdr, sizeof(stub->hdr), 0);
-    if (n == -1)
+    if (n == -1) {
+        debug("stub_refresh(stub=%p fd=%d) pread errno=%d (%s)\n",
+                stub, stub->fd, errno, strerror(errno));
         return -1;
+    }
     if (n < sizeof(stub->hdr)) {
         errno = EIO;
         return -1;
     }
-    debug("stub_refresh %p magic=0x%x version=%d flags=0x%x\n",
+    debug("stub_refresh %p magic=0x%x version=%d flags=0x%x len=%lld\n",
             stub, stub->hdr.magic, stub->hdr.version,
-            stub->hdr.flags);
+            stub->hdr.flags, (long long)stub->hdr.len);
     return 0;
 }
 
