@@ -677,7 +677,7 @@ int stub_write(struct undup_state *state, struct stub *stub, const void *buf, si
     state_wrlock(state);
 
     ret = lookup_hash(state, hash, &datafd, &datapos);
-    debug("loookup_hash got %d %d %lld n=%d\n",
+    debug("lookup_hash got %d %d %lld n=%d\n",
           ret, datafd, (long long)datapos, (int)n);
     if (ret == -1)
         goto out;
