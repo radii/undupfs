@@ -68,8 +68,8 @@ int stub_refresh(struct undup_state *state, struct stub *stub)
         errno = EIO;
         return -1;
     }
-    debug("stub_refresh %p magic=0x%x version=%d flags=0x%x len=%lld\n",
-            stub, stub->hdr.magic, stub->hdr.version,
+    debug("stub_refresh %p fd=%d magic=0x%x version=%d flags=0x%x len=%lld\n",
+            stub, stub->fd, stub->hdr.magic, stub->hdr.version,
             stub->hdr.flags, (long long)stub->hdr.len);
     return 0;
 }
@@ -91,8 +91,8 @@ struct stub *stub_open(struct undup_state *state, const char *stubpath, int rdwr
         goto err;
     if (stub_refresh(state, stub) == -1)
         goto err;
-    debug("stub_open(%s) = %p magic=0x%x version=%d flags=0x%x len=%lld\n",
-            stubpath, stub, stub->hdr.magic, stub->hdr.version,
+    debug("stub_open(%s) = %p fd=%d magic=0x%x version=%d flags=0x%x len=%lld\n",
+            stubpath, stub, stub->fd, stub->hdr.magic, stub->hdr.version,
             stub->hdr.flags, (long long)stub->hdr.len);
     return stub;
 err:
@@ -107,7 +107,7 @@ int stub_close(struct undup_state *state, struct stub *stub)
 {
     int n, e;
 
-    debug("stub_close(%p)\n", stub);
+    debug("stub_close(%p) fd=%d\n", stub, stub->fd);
     n = close(stub->fd);
     e = errno;
     free(stub);
