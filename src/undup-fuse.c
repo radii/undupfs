@@ -353,7 +353,8 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     if (n == -1)
         return -errno;
 
-    close(fd);
+    if (close(fd) == -1)
+        debug("undup_create: close(%d): %d (%s)\n", fd, errno, strerror(errno));
     // XXX whatta hack, do a stub_create() or something
     stub = stub_open(state, b, O_RDWR);
     if (!stub)
