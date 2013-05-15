@@ -442,7 +442,6 @@ free_error:
                         bloom_insert(state->bp1, state->bloom1[i1], p);
                     }
                 }
-                dump_blooms(state, hash);
             }
 
             for (j = 0; j < nhash; j++) {
