@@ -547,8 +547,9 @@ static int undup_init(const char *basedir)
     struct stat st;
     struct undup_hdr hdr;
     int filtersz0 = 1024;
-    int filtersz1 = filtersz0 * 4;
+    int filtersz1 = filtersz0 * 20;
     int bitcount = 7;
+    int bitcount1 = 3;
 
     char *f = getenv("UNDUP_DEBUG");
     if (f) {
@@ -598,7 +599,7 @@ static int undup_init(const char *basedir)
     state->hashsz    = 32; // SHA256
 
     state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
-    state->bp1 = bloom_setup(filtersz1, bitcount, state->hashsz);
+    state->bp1 = bloom_setup(filtersz1, bitcount1, state->hashsz);
 
     if ((e = pthread_rwlock_init(&state->lock, 0)) != 0)
         die("pthread_rwlock_init: %s\n", strerror(e));
