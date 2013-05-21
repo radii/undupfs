@@ -1,0 +1,7 @@
+starttests t.sparse
+
+test "extend a file and read back zeros from it"
+truncate -s $((1024*1024)) $d/trunc1m
+dd if=$d/trunc1m bs=1k count=1 | cmp -s - <(dd if=/dev/zero bs=1k count=1) || fail
+
+endtests t.foo
