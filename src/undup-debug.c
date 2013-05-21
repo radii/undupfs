@@ -144,7 +144,7 @@ static int dumpstub(int argc, char **argv)
                     (long long)pos, strerror(errno));
 
         if (n < state->hashsz)
-            die("%s: early EOF at %lld (got %d of %d0\n",
+            die("%s: early EOF at %lld (got %d of %d)\n",
                     fname, (long long)pos, n, state->hashsz);
 
         printf("%-8lld ", (long long)i);
