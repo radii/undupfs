@@ -497,6 +497,15 @@ void count_maybe_dump(struct undup_state *state, double t)
     fprintf(f_stats, "stats output took %.6f\n", t1 - t0);
 }
 
+static int all_zeros(u8 *buf, int n)
+{
+    int i;
+
+    for (i=0; i<n; i++)
+        if (buf[i] != 0) return 0;
+    return 1;
+}
+
 int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t size, off_t offset)
 {
     int tot, n, m, ret;
@@ -548,15 +557,6 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
     }
 
     return tot;
-}
-
-static int all_zeros(u8 *buf, int n)
-{
-    int i;
-
-    for (i=0; i<n; i++)
-        if (buf[i] != 0) return 0;
-    return 1;
 }
 
 /*
