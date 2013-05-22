@@ -506,6 +506,18 @@ static int all_zeros(u8 *buf, int n)
     return 1;
 }
 
+static int lookup_special(struct undup_state *state, u8 *hash, void **bufp, int *len)
+{
+    void *buf = *bufp;
+
+    if (all_zeros(hash, state->hashsz)) {
+        memset(buf, 0, HASH_BLOCK);
+        *len = HASH_BLOCK;
+        return 1;
+    }
+    return 0;
+}
+
 int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t size, off_t offset)
 {
     int tot, n, m, ret;
@@ -525,10 +537,17 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
 
     tot = 0;
     while (size > 0) {
+        n = -1;
         state_rdlock(state);
         ret = stub_get_hash(state, stub, offset, hash);
-        if (ret != -1)
-            ret = lookup_hash(state, hash, &datafd, &datapos);
+        if (ret != -1) {
+            if (lookup_special(state, hash, &buf, &n)) {
+                ret = 1;
+                debug("lookup_special output %d bytes\n", n);
+            } else {
+                ret = lookup_hash(state, hash, &datafd, &datapos);
+            }
+        }
         state_unlock(state);
         debug("lookup got %d %d %lld\n", ret, datafd, (long long)datapos);
         if (ret == -1)
@@ -541,14 +560,16 @@ int stub_read(struct undup_state *state, struct stub *stub, void *buf, size_t si
             errno = EIO;
             return -1;
         }
-        m = size > state->blksz ? state->blksz : size;
-        debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
-        n = pread(datafd, buf, m, datapos);
-        if (n == -1)
-            return -1;
-        if (n < m) {
-            errno = EIO;
-            return -1;
+        if (n == -1) {
+            m = size > state->blksz ? state->blksz : size;
+            debug("pread(%d, %p, %d, %lld)\n", datafd, buf, m, (long long)datapos);
+            n = pread(datafd, buf, m, datapos);
+            if (n == -1)
+                return -1;
+            if (n < m) {
+                errno = EIO;
+                return -1;
+            }
         }
         size -= n;
         buf += n;
