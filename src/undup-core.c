@@ -148,6 +148,10 @@ static int stub_get_hash(struct undup_state *state, struct stub *stub, off_t off
     if (n == -1)
         return -1;
     if (n < state->hashsz) {
+        if (n == 0 && off < stub->hdr.len) {
+            memset(hash, 0, state->hashsz);
+            return 0;
+        }
         errno = EIO;
         verbose("got %d bytes (needed %d) at %lld\n",
                 n, state->hashsz, (long long)hashpos);
