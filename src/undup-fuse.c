@@ -547,9 +547,9 @@ static int undup_init(const char *basedir)
     struct stat st;
     struct undup_hdr hdr;
     int filtersz0 = 1024;
-    int filtersz1 = filtersz0 * 20;
-    int bitcount = 7;
-    int bitcount1 = 3;
+    int filtersz1 = 262144;
+    int bitcount = 6;
+    int bitcount1 = 11;
 
     char *f = getenv("UNDUP_DEBUG");
     if (f) {
