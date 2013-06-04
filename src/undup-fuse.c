@@ -37,6 +37,37 @@ int o_verbose = 0;
 FILE *f_debug = NULL;
 FILE *f_stats = NULL;
 
+static int undup_statfs(const char *path, struct statvfs *v)
+{
+    char b[PATH_MAX+1];
+    int n;
+    struct statvfs h;
+
+    n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
+    if (n > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    debug("statfs path=%s b=%s\n", path, b);
+
+    n = statvfs(b, &h);
+    if (n == -1)
+        return -errno;
+
+    v->f_bsize  = h.f_bsize;
+    v->f_frsize = h.f_frsize;
+    v->f_blocks = h.f_blocks;
+    v->f_bfree  = h.f_bfree;
+    v->f_bavail = h.f_bavail;
+    v->f_files  = h.f_files;
+    v->f_ffree  = h.f_ffree;
+    v->f_favail = h.f_favail;
+    v->f_fsid   = -1; /* XXX */
+    v->f_flag   = h.f_flag;
+    v->f_namemax = h.f_namemax - strlen(state->basedir);
+
+    return 0;
+}
+
 static int undup_getattr(const char *path, struct stat *stbuf)
 {
     char b[PATH_MAX+1];
@@ -519,6 +550,7 @@ out_close:
 }
 
 static struct fuse_operations undup_oper = {
+    .statfs             = undup_statfs,
     .getattr            = undup_getattr,
     .chown              = undup_chown,
     .chmod              = undup_chmod,
