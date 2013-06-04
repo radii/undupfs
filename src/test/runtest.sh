@@ -9,7 +9,7 @@ tmpdir=`mktemp -d`
 [ -d "$target" ] || { echo "No such directory '$target'" >&2; exit 1; }
 export target testdir tmpdir
 
-trap "rm -rf $tmpdir" QUIT EXIT INT HUP
+trap "echo cleaning up...; rm -rf $tmpdir" QUIT EXIT INT HUP
 
 . $testdir/funcs
 
