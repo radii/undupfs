@@ -92,6 +92,8 @@ static int undup_getattr(const char *path, struct stat *stbuf)
         return -errno;
 
     stbuf->st_size = stub->hdr.len;
+    stbuf->st_uid = stub->hdr.uid;
+    stbuf->st_gid = stub->hdr.gid;
 
     stub_close(state, stub);
     return 0;
@@ -364,6 +366,8 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
     int n, fd;
     struct undup_hdr hdr;
     struct stub *stub;
+    struct fuse_context *ctx = fuse_get_context();
+    int um, e;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -371,14 +375,19 @@ static int undup_create(const char *path, mode_t mode, struct fuse_file_info *fi
 
     debug("create path=%s mode=0%o\n", path, mode);
 
+    um = umask(ctx->umask);
     fd = creat(b, mode);
+    e = errno;
+    umask(um);
     if (fd == -1)
-        return -errno;
+        return -e;
 
     hdr.magic = UNDUPFS_MAGIC;
     hdr.version = 1;
     hdr.flags = 0;
     hdr.len = 0;
+    hdr.uid = ctx->uid;
+    hdr.gid = ctx->gid;
 
     n = write(fd, &hdr, sizeof(hdr));
     if (n == -1)

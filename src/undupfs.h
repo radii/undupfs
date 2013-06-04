@@ -8,6 +8,8 @@ struct undup_hdr {
     u16 version;
     u16 flags;
     u64 len;
+    u32 uid;
+    u32 gid;
 };
 
 struct stub {
