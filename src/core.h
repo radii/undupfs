@@ -37,6 +37,7 @@ int stub_refresh(struct undup_state *state, struct stub *stub);
 void count_maybe_dump(struct undup_state *state, double t);
 
 int bucket_validate(struct undup_state *state);
+int stub_update_ids(struct stub *stub, u32 uid, u32 gid);
 int stub_update_len(struct stub *stub, off_t newlen, int do_trunc);
 void do_hash(void *hash, const void *buf, int n);
 int dumptocs(FILE *f, struct undup_state *state);

@@ -103,6 +103,7 @@ static int undup_chown(const char *path, uid_t uid, gid_t gid)
 {
     char b[PATH_MAX+1];
     int n;
+    struct stub *stub;
 
     n = snprintf(b, PATH_MAX, "%s/%s", state->basedir, path);
     if (n > PATH_MAX)
@@ -110,8 +111,9 @@ static int undup_chown(const char *path, uid_t uid, gid_t gid)
 
     debug("chown path=%s b=%s uid=%d gid=%d\n", path, b, uid, gid);
 
-    n = chown(b, uid, gid);
-    return n < 0 ? -errno : 0;
+    stub = stub_open(state, b, O_RDWR);
+
+    return stub_update_ids(stub, uid, gid);
 }
 
 static int undup_chmod(const char *path, mode_t mode)

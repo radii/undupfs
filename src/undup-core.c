@@ -116,6 +116,29 @@ int stub_close(struct undup_state *state, struct stub *stub)
     return n == -1 ? -e : 0;
 }
 
+int stub_update_ids(struct stub *stub, u32 uid, u32 gid)
+{
+    int n;
+
+    debug("stub_update_ids %p uid=%d->%d gid=%d->%d\n",
+            stub, stub->hdr.uid, uid, stub->hdr.gid, gid);
+
+    stub->hdr.uid = uid;
+    stub->hdr.gid = gid;
+
+    ASSERT((offsetof(struct undup_hdr, uid) + sizeof(stub->hdr.uid)) ==
+            offsetof(struct undup_hdr, gid));
+    n = pwrite(stub->fd, &stub->hdr.uid, 2 * sizeof(stub->hdr.uid),
+            offsetof(struct undup_hdr, uid));
+    if (n == -1)
+        return -1;
+    if (n < 2 * sizeof(stub->hdr.uid)) {
+        errno = EIO;
+        return -1;
+    }
+    return n < 0 ? -errno : 0;
+}
+
 int stub_update_len(struct stub *stub, off_t newlen, int do_trunc)
 {
     int n;
