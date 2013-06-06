@@ -372,7 +372,7 @@ void count_print_stats(struct undup_state *state, FILE *f)
  * Find HASH in the bucket.  If found, fill in FD and OFF and return 1.
  * If not found, return 0.  On error, return -1 with errno set.
  */
-static int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t *off)
+int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t *off)
 {
     int h, i, j, n;
     char buf[HASH_BLOCK];
@@ -533,13 +533,15 @@ static int all_zeros(u8 *buf, int n)
     return 1;
 }
 
-static int lookup_special(struct undup_state *state, u8 *hash, void **bufp, int *len)
+int lookup_special(struct undup_state *state, u8 *hash, void **bufp, int *len)
 {
-    void *buf = *bufp;
+    void *buf = bufp ? *bufp : NULL;
 
     if (all_zeros(hash, state->hashsz)) {
-        memset(buf, 0, HASH_BLOCK);
-        *len = HASH_BLOCK;
+        if (buf)
+            memset(buf, 0, HASH_BLOCK);
+        if (len)
+            *len = HASH_BLOCK;
         return 1;
     }
     return 0;

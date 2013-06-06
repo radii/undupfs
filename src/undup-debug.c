@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include "myfts.h"
 
 #include "shared.h"
 #include "core.h"
@@ -34,6 +35,7 @@ static void usage(const char *cmd)
     fprintf(stderr, "Valid values for cmd include:\n");
     fprintf(stderr, "  dumpstub /path/to/undupfs/stubfile\n");
     fprintf(stderr, "  dumpbucket /path/to/.undupfs/undup.dat\n");
+    fprintf(stderr, "  gccheck /path/tp/undupfs\n");
     die("");
 }
 
@@ -49,8 +51,9 @@ struct undup_state *debug_init(const char *basedir)
     struct stat st;
     struct undup_hdr hdr;
     int filtersz0 = 1024;
-    int filtersz1 = filtersz0 * 4;
+    int filtersz1 = filtersz0 * 20;
     int bitcount = 7;
+    int bitcount1 = 3;
     struct undup_state *state;
 
     char *f = getenv("UNDUP_DEBUG");
@@ -103,7 +106,7 @@ struct undup_state *debug_init(const char *basedir)
     state->hashsz    = 32; // SHA256
 
     state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
-    state->bp1 = bloom_setup(filtersz1, bitcount, state->hashsz);
+    state->bp1 = bloom_setup(filtersz1, bitcount1, state->hashsz);
 
     bucket_validate(state);
 
@@ -170,12 +173,163 @@ static int dumpbucket(int argc, char **argv)
     return 0;
 }
 
+/* compute how many data blocks are in the given bucket.  The layout is
+ * +--------+----+----+----+----+----------+----+----+----+----+----------+
+ * | header | d0 | d1 | d2 | d3 | h0h1h2h3 | d4 | d5 | d6 | d7 | h4h5h6h7 |
+ * +--------+----+----+----+----+----------+----+----+----+----+----------+
+ * where d0 is data block 0 and h0 is the hash of d0.
+ *
+ * so the number of datablocks is the byte length, minus the header, divided
+ * by the block size, divided by (N+1) and then multiplied by N to account
+ * for the hashblocks.  Then add on any remainder to account for not-yet-hashed
+ * blocks.  For 4k blocks and SHA256, N = 4096 / 32 = 128.
+ */
+static u64 bucket_nblock(struct undup_state *state)
+{
+    u64 blkbytes = state->bucketlen - sizeof(struct undup_hdr);
+    u64 numblk = blkbytes / state->blksz;
+    int hashperblk = state->blksz / state->hashsz;
+    u64 leftover = blkbytes % (state->blksz * (hashperblk + 1));
+    u64 numdatablk = numblk / (hashperblk + 1) * hashperblk;
+
+    return numdatablk + leftover / state->blksz;
+}
+
+static u64 blknum_offset(struct undup_state *state, off_t off)
+{
+    u64 offbytes = off - sizeof(struct undup_hdr);
+    u64 numblk = offbytes / state->blksz;
+    int hashperblk = state->blksz / state->hashsz;
+    u64 leftover = offbytes % (state->blksz * (hashperblk + 1));
+    u64 numdatablk = numblk / (hashperblk + 1) * hashperblk;
+
+    return numdatablk + leftover / state->blksz;
+}
+
+struct gcstats {
+    u32 ncount;
+    u8 *count;
+};
+
+static void u8_saturating_add(u8 *x, int delta)
+{
+    int a = *x + delta;
+    if (a > 255)
+        *x = 255;
+    else if (a < 0)
+        *x = 0;
+    else
+        *x = a;
+}
+
+static int gccount_one(struct undup_state *state, struct gcstats *gc,
+        struct stub *stub, char *fname)
+{
+    u64 nhash;
+    int i, ret;
+
+    nhash = stub->hdr.len / state->blksz + !!(stub->hdr.len % state->blksz);
+
+    printf("counting %d hashes from %s:\n", (int)nhash, fname);
+
+    for (i=0; i<nhash; i++) {
+        int n;
+        int fd;
+        off_t off, blkoff;
+        u8 hash[state->hashsz];
+        off_t pos = sizeof(stub->hdr) + i * state->hashsz;
+
+        if ((n = pread(stub->fd, hash, state->hashsz, pos)) == -1)
+            die("pread(%d, %p, %d, %lld): %s\n",
+                    stub->fd, hash, state->hashsz,
+                    (long long)pos, strerror(errno));
+
+        if (n == 0)
+            return 0;
+        if (n < state->hashsz)
+            die("%s: early EOF at %lld (got %d of %d)\n",
+                    fname, (long long)pos, n, state->hashsz);
+        if (lookup_special(state, hash, 0, 0))
+            continue;
+        ret = lookup_hash(state, hash, &fd, &off);
+        if (ret < 0 || off == 0)
+            die("%s: lookup failed for %02x%02x%02x%02x got %d,%d\n",
+                    fname, hash[0], hash[1], hash[2], hash[3], fd, (int)off);
+        // XXX dtrt wrt fd
+        blkoff = blknum_offset(state, off);
+        ASSERT(off % state->blksz == 0);
+        if (blkoff < 0 || blkoff > gc->ncount)
+            die("blkoff %d ncount %d\n", (int)blkoff, (int)gc->ncount);
+        u8_saturating_add(&gc->count[blkoff], 1);
+
+        if (i % 1000 == 0) {
+            printf("%d %d\r", i, (int)blkoff);
+            fflush(stdout);
+        }
+    }
+    printf("\n");
+    return 0;
+}
+
+static int gccheck(int argc, char **argv)
+{
+    struct undup_state *state;
+    struct stub *stub;
+    char *paths[2] = { argv[0], 0 };
+    FTS *fts;
+    FTSENT *e;
+    char undup_path[PATH_MAX];
+    struct gcstats *gcstats;
+    int histogram[256] = { 0 };
+    int i, n;
+
+    snprintf(undup_path, PATH_MAX, "%s/.undupfs", argv[0]);
+
+    state = debug_init(argv[0]);
+    if (!state) die("%s: %s\n", argv[0], strerror(errno));
+
+    gcstats = calloc(sizeof *gcstats, 1);
+    if (!gcstats) die("malloc failed\n");
+    gcstats->ncount = bucket_nblock(state);
+    gcstats->count = calloc(gcstats->ncount, 1);
+    if (!gcstats->count) die("malloc(%lld) failed\n", bucket_nblock(state));
+
+    fts = fts_open(paths, FTS_XDEV, NULL);
+    if (!fts) die("fts_open(%s): %s\n", argv[0], strerror(errno));
+
+    while ((e = fts_read(fts)) != NULL) {
+        if (!strcmp(e->fts_name, ".undupfs") &&
+                !strcmp(e->fts_path, undup_path)) {
+            fts_set(fts, e, FTS_SKIP);
+        }
+        if (e->fts_info == FTS_F) {
+            stub = stub_open(state, e->fts_path, O_RDONLY);
+            if (!stub) die("%s: %s\n", e->fts_path, strerror(errno));
+            gccount_one(state, gcstats, stub, e->fts_path);
+            stub_close(state, stub);
+        }
+    }
+    for (i=0; i<gcstats->ncount; i++) {
+        histogram[gcstats->count[i]]++;
+    }
+    for (n = 255; n > 0; n--)
+        if (histogram[n] > 0) break;
+    n = (n / 8 + !!(n % 8)) * 8;
+    for (i=0; i<n; i++) {
+        printf("%7d%s", histogram[i], i % 8 == 7 ? "\n" : " ");
+    }
+
+    fts_close(fts);
+    return 0;
+}
+
 struct {
     const char *name;
     int (*func)(int, char **);
 } cmds[] = {
     { "dumpstub", dumpstub },
     { "dumpbucket", dumpbucket },
+    { "gccheck", gccheck },
     { 0, 0 }
 };
 

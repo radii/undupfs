@@ -47,4 +47,7 @@ void state_rdlock(struct undup_state *state);
 void state_wrlock(struct undup_state *state);
 void state_unlock(struct undup_state *state);
 
+int lookup_special(struct undup_state *, u8 *, void **, int *);
+int lookup_hash(struct undup_state *state, const u8 *hash, int *fd, off_t *off);
+
 #endif // UNDUP_CORE_H
