@@ -7,6 +7,8 @@
  * version 3.  See the file COPYING for more information.
  */
 
+#define _GNU_SOURCE /* for qsort_r */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -195,7 +197,7 @@ static u64 bucket_nblock(struct undup_state *state)
     return numdatablk + leftover / state->blksz;
 }
 
-static u64 blknum_offset(struct undup_state *state, off_t off)
+u64 blknum_offset(struct undup_state *state, off_t off)
 {
     u64 offbytes = off - sizeof(struct undup_hdr);
     u64 numblk = offbytes / state->blksz;
@@ -207,8 +209,10 @@ static u64 blknum_offset(struct undup_state *state, off_t off)
 }
 
 struct gcstats {
-    u32 ncount;
+    u64 numblk;
+    u64 ncount;
     u8 *count;
+    u8 *hash;
 };
 
 static void u8_saturating_add(u8 *x, int delta)
@@ -222,11 +226,74 @@ static void u8_saturating_add(u8 *x, int delta)
         *x = a;
 }
 
+/* Threadsafe implementation of bsearch(3).
+ *
+ * Similar to bsearch(3) from <stdlib.h> except that the compar() helper
+ * function takes an argument `arg' to allow the caller to pass per-instance
+ * data in.
+ *
+ * Compare the qsort(3) versus qsort_r(3) functions.
+ */
+void *bsearch_r(const void *key, const void *base,
+        size_t nmemb, size_t size,
+        int (*compar)(const void *, const void *, void *), void *arg)
+{
+    const unsigned char *b = base;
+    size_t n = 0, m = nmemb - 1;
+    int r;
+    const void *p;
+
+    p = b + m * size;
+    r = (*compar)(key, p, arg);
+    if (r == 0)
+        return (void *)p;
+    else if (r > 0)
+        return NULL;
+
+    p = b;
+    r = (*compar)(key, p, arg);
+    if (r == 0)
+        return (void *)p;
+    else if (r < 0)
+        return NULL;
+
+    while (m - n > 1) {
+        size_t i = n + (m - n) / 2;
+        p = b + i * size;
+
+        r = (*compar)(key, p, arg);
+
+        if (r == 0)
+            return (void *)p;
+        else if (r > 0)
+            n = i;
+        else if (r < 0)
+            m = i;
+    }
+    return NULL;
+}
+
+static int hash_compar(const void *a, const void *b, void *arg)
+{
+    struct undup_state *state = arg;
+
+    return memcmp(a, b, state->hashsz);
+}
+
+static off_t blkidx_search(struct undup_state *state, struct gcstats *gc, u8 *hash)
+{
+    u8 *p;
+
+    p = bsearch_r(hash, gc->hash, gc->ncount, state->hashsz, hash_compar, state);
+    if (!p) return -1;
+    return (p - gc->hash) / state->hashsz;
+}
+
 static int gccount_one(struct undup_state *state, struct gcstats *gc,
         struct stub *stub, char *fname)
 {
     u64 nhash;
-    int i, ret;
+    int i;
 
     nhash = stub->hdr.len / state->blksz + !!(stub->hdr.len % state->blksz);
 
@@ -234,8 +301,7 @@ static int gccount_one(struct undup_state *state, struct gcstats *gc,
 
     for (i=0; i<nhash; i++) {
         int n;
-        int fd;
-        off_t off, blkoff;
+        off_t blkidx;
         u8 hash[state->hashsz];
         off_t pos = sizeof(stub->hdr) + i * state->hashsz;
 
@@ -251,19 +317,16 @@ static int gccount_one(struct undup_state *state, struct gcstats *gc,
                     fname, (long long)pos, n, state->hashsz);
         if (lookup_special(state, hash, 0, 0))
             continue;
-        ret = lookup_hash(state, hash, &fd, &off);
-        if (ret < 0 || off == 0)
-            die("%s: lookup failed for %02x%02x%02x%02x got %d,%d\n",
-                    fname, hash[0], hash[1], hash[2], hash[3], fd, (int)off);
-        // XXX dtrt wrt fd
-        blkoff = blknum_offset(state, off);
-        ASSERT(off % state->blksz == 0);
-        if (blkoff < 0 || blkoff > gc->ncount)
-            die("blkoff %d ncount %d\n", (int)blkoff, (int)gc->ncount);
-        u8_saturating_add(&gc->count[blkoff], 1);
+        blkidx = blkidx_search(state, gc, hash);
+        if (blkidx == -1) {
+            die("Search for %02x%02x%02x%02x failed\n",
+                    hash[0], hash[1], hash[2], hash[3]);
+        }
+        u8_saturating_add(&gc->count[blkidx], 1);
+        gc->numblk++;
 
         if (i % 1000 == 0) {
-            printf("%d %d\r", i, (int)blkoff);
+            printf("%d %d\r", i, (int)blkidx);
             fflush(stdout);
         }
     }
@@ -281,7 +344,9 @@ static int gccheck(int argc, char **argv)
     char undup_path[PATH_MAX];
     struct gcstats *gcstats;
     int histogram[256] = { 0 };
-    int i, n;
+    int i, n, nblk, hashperblk;
+    u64 nhash;
+    off_t blkpos;
 
     snprintf(undup_path, PATH_MAX, "%s/.undupfs", argv[0]);
 
@@ -290,9 +355,43 @@ static int gccheck(int argc, char **argv)
 
     gcstats = calloc(sizeof *gcstats, 1);
     if (!gcstats) die("malloc failed\n");
-    gcstats->ncount = bucket_nblock(state);
-    gcstats->count = calloc(gcstats->ncount, 1);
-    if (!gcstats->count) die("malloc(%lld) failed\n", bucket_nblock(state));
+    nhash = bucket_nblock(state);
+    gcstats->ncount = nhash;
+    gcstats->count = calloc(nhash, 1);
+    if (!gcstats->count)
+        die("malloc(%lld) failed\n", bucket_nblock(state));
+    gcstats->hash = calloc(nhash, state->hashsz);
+    if (!gcstats->hash)
+        die("malloc(%lld) failed\n", nhash * state->hashsz);
+
+    hashperblk = state->blksz / state->hashsz;
+    nblk = nhash / hashperblk;
+    printf("reading %d hashes (tail %lld) total %d.\n", (int)nblk * hashperblk,
+            (nhash - nblk * hashperblk), (int)nhash);
+    for (i=0; i<nblk; i++) {
+        off_t blkpos = HASH_BLOCK * ((i + 1) * (hashperblk + 1));
+        u8 *p = gcstats->hash + i * HASH_BLOCK;
+        n = pread(state->fd, p, HASH_BLOCK, blkpos);
+        if (n != HASH_BLOCK) {
+            die("pread(%d, %p, %lld, %lld) = %d (%s)\n",
+                    state->fd, gcstats->hash, HASH_BLOCK, (u64)blkpos, n, strerror(errno));
+        }
+    }
+    for (i = nblk * hashperblk, blkpos = HASH_BLOCK * (1 + (nblk * (hashperblk + 1)));
+         blkpos < state->bucketlen;
+         i++, blkpos += HASH_BLOCK) {
+        u8 buf[HASH_BLOCK];
+        u8 *p = gcstats->hash + i * state->hashsz;
+
+        n = pread(state->fd, buf, HASH_BLOCK, blkpos);
+        if (n != HASH_BLOCK) {
+            die("pread(%d, %p, %lld, %lld) = %d (%s)\n",
+                    state->fd, buf, HASH_BLOCK, blkpos, n, strerror(errno));
+        }
+        do_hash(p, buf, n);
+    }
+
+    qsort_r(gcstats->hash, nhash, state->hashsz, hash_compar, state);
 
     fts = fts_open(paths, FTS_XDEV, NULL);
     if (!fts) die("fts_open(%s): %s\n", argv[0], strerror(errno));
@@ -318,6 +417,11 @@ static int gccheck(int argc, char **argv)
     for (i=0; i<n; i++) {
         printf("%7d%s", histogram[i], i % 8 == 7 ? "\n" : " ");
     }
+    printf("%d unused blocks (%.0f%%)\n",
+            histogram[0], histogram[0] * 100. / gcstats->ncount);
+    printf("%lld blocks stored, %lld blocks used, %.0f%% saved\n",
+            gcstats->ncount, gcstats->numblk,
+            100 - gcstats->ncount * 100. / gcstats->numblk);
 
     fts_close(fts);
     return 0;
