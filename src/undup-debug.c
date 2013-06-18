@@ -37,7 +37,7 @@ static void usage(const char *cmd)
     fprintf(stderr, "Valid values for cmd include:\n");
     fprintf(stderr, "  dumpstub /path/to/undupfs/stubfile\n");
     fprintf(stderr, "  dumpbucket /path/to/.undupfs/undup.dat\n");
-    fprintf(stderr, "  gccheck /path/tp/undupfs\n");
+    fprintf(stderr, "  gccheck /path/to/undupfs\n");
     die("");
 }
 
