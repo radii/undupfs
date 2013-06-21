@@ -34,26 +34,18 @@ The following flag bits are present in the flags field:
 Stub files with DIRECT_CONTENT set contain `len` bytes of user data immediately
 after the `undup_hdr`.
 
-Non-DIRECT stub files have $ceil(`len` / 4096)$ CID values starting after the
+Non-DIRECT stub files have $ceil(`len` / 4096)$ hashes starting after the
 `undup_hdr`.
 
 == CONTENT STORAGE ==
 
-File content is stored in a separate directory tree, .undup/ in the root of the
-host directory.  Content is managed in 4KiB blocks.  Each block is identified
-by a 64-bit Content ID (cid), frequently rendered as 16 hex digits.  The CID is
-computed as the first 8 bytes of the SHA-1 hash of the data block.  Blocks are
-stored in bundle files identified by CID.  For example the block with CID
-1122334455667788 might be found in .undup/1122/334445566.  A bundle file
-consists of a TOC `struct undup_bundle` followed by zero or more data blocks.
-The TOC starts with 8 bytes of header followed by 511 "slots" of 8 bytes each.
+File content is stored in 4 KiB blocks in one or more *bucket* files under the
+`.undupfs` subdirectory of the host directory.
 
-    struct undup_bundle {
-        u32 magic;      // UDBN = 0x55 0x44 0x42 0x4e
-    };
+A bucket file consists of a header followed by zero or more segments.  A
+completed segment consists of 4096 / 32 = 128 blocks of data, followed by a
+block of data hashes (32 bytes each for SHA256) called a TOC.  A final,
+"incomplete", segment may contain 1 to 127 data blocks without a TOC.
 
-A slot corresponds to 
-
-== COLLISIONS ==
-
-
+Upon initialization, the implementation reads all of the TOC blocks and
+constructs appropriate in-memory data structures to find a data block.
