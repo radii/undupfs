@@ -31,3 +31,10 @@ filesystems (generally, give membership in the `fuse` group).
 ```
  fusermount -u ~/vms
 ```
+
+#### Future Work
+
+1. garbage collection.
+2. "pivoted parallel Bloom filter test" to speed up Bloom queries.
+3. partition blocks into multiple buckets for improved liveness probabilities.
+4. online dedup of an existing folder.
