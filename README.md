@@ -11,7 +11,7 @@ suited to SSD storage.
 #### Getting Started
 
 0. Install fuse and its development prerequisites (`sudo apt-get install
-libfuse-dev`, and ensure that your user is permitted to mount new fuse
+libfuse-dev`) and ensure that your user is permitted to mount new fuse
 filesystems (generally, this requires membership in the `fuse` group).
 1. Build and install `undupfs`.  This will put the binaries in `/usr/local/bin`.
 ```
