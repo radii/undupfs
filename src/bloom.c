@@ -259,14 +259,6 @@ static void hex2bytes(u8 *b, const char *p)
     ASSERT(p[i] == '\0');
 }
 
-static void hash(void *h, const void *buf, int n)
-{
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, buf, n);
-    SHA256_Final(h, &ctx);
-}
-
 int main(void)
 {
     printf("running Bloom filter tests\n");
@@ -449,7 +441,7 @@ int main(void)
             int collided, before, after;
 
             snprintf(a, sizeof a, "%d", i);
-            hash(g, a, sizeof(a));
+            do_hash(g, a, sizeof(a));
             before = bloom_present(p, b, g);
             collided = bloom_insert(p, b, g);
             after = bloom_present(p, b, g);
