@@ -15,7 +15,7 @@ libfuse-dev`) and ensure that your user is permitted to mount new fuse
 filesystems (generally, give membership in the `fuse` group).
 1. Build and install `undupfs`.  This will put the binaries in `/usr/local/bin`.
 
-        cd undupfs/src && make && make install
+        cd undupfs/src && make && sudo make install
 
 2. Create a new undupfs filesystem.
 
