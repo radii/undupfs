@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core.h"
 #include "bloom.h"
 
 /*
@@ -236,6 +237,7 @@ void bloom_dump(struct bloom_params *p, const u8 *b, FILE *f, const u8 *key)
 
 int o_verbose = 0;
 FILE *f_debug = NULL;
+FILE *f_stats = NULL;
 
 static int hexnibble(int x)
 {

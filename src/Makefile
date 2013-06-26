@@ -14,8 +14,8 @@ undup-fuse: undup-fuse.o undup-core.o util.o bloom.o
 undupfs-debug: undup-debug.o undup-core.o util.o bloom.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
-bloom: bloom.c util.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -DMAIN -o bloom bloom.c util.o
+bloom: bloom.c util.o undup-core.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -DMAIN -o bloom bloom.c util.o undup-core.o
 
 install: all
 	cp undupfs-debug undup-fuse mkfs.undup /usr/local/bin
