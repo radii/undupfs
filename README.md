@@ -14,23 +14,22 @@ suited to SSD storage.
 libfuse-dev`) and ensure that your user is permitted to mount new fuse
 filesystems (generally, give membership in the `fuse` group).
 1. Build and install `undupfs`.  This will put the binaries in `/usr/local/bin`.
-```
- cd undupfs/src && make && make install
-```
+
+        cd undupfs/src && make && make install
+
 2. Create a new undupfs filesystem.
-```
- mkdir -p ~/.undup/vms ~/vms
- mkfs.undup ~/.undup/vms
-```
+
+        mkdir -p ~/.undup/vms ~/vms
+        mkfs.undup ~/.undup/vms
+
 3. Mount the new filesystem on the desired location.
-```
- undup-fuse ~/.undup/vms ~/vms
-```
+
+        undup-fuse ~/.undup/vms ~/vms
+
 4. Move, copy, or write new files to the newly mounted undupfs filesystem.
 5. When done, unmount the undupfs filesystem.
-```
- fusermount -u ~/vms
-```
+
+        fusermount -u ~/vms
 
 #### Future Work
 
