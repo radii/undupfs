@@ -262,7 +262,7 @@ int dumptocs(FILE *f, struct undup_state *state)
             if (n == -1) die("dumpbucket: pread: %s\n", strerror(errno));
             if (n < HASH_BLOCK)
                 die("dumpbucket: short read: %d at %lld\n", n, (long long)pos);
-            do_hash(hash, buf, n);
+            do_hash(hash, state->hashsz, buf, n);
             fprintf(f, "%-8lld ", (long long)blknum);
             print_hash(f, hash, state->hashsz);
             fprintf(f, "\n");
@@ -648,7 +648,7 @@ int bucket_validate(struct undup_state *state)
         else
             nzero = 0;
         hash = &state->hashblock[i * state->hashsz];
-        do_hash(hash, buf, n);
+        do_hash(hash, state->hashsz, buf, n);
     }
 
     state->hbpos = i * state->hashsz;
@@ -710,12 +710,12 @@ int stub_write_block(struct undup_state *state, struct stub *stub,
     return 0;
 }
 
-void do_hash(void *hash, const void *buf, int n)
+void do_hash(void *hash, int hashsz, const void *buf, int n)
 {
     struct sha512_ctx ctx;
     sha512_init(&ctx);
     sha512_update(&ctx, buf, n);
-    sha512_final(&ctx, hash, 16);
+    sha512_final(&ctx, hash, hashsz);
 }
 
 int stub_write(struct undup_state *state, struct stub *stub, const void *buf, size_t n, off_t off)
@@ -727,7 +727,7 @@ int stub_write(struct undup_state *state, struct stub *stub, const void *buf, si
 
     ASSERT(n == HASH_BLOCK);
 
-    do_hash(hash, buf, n);
+    do_hash(hash, state->hashsz, buf, n);
 
     state_wrlock(state);
 

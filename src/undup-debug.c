@@ -388,7 +388,7 @@ static int gccheck(int argc, char **argv)
             die("pread(%d, %p, %lld, %lld) = %d (%s)\n",
                     state->fd, buf, HASH_BLOCK, blkpos, n, strerror(errno));
         }
-        do_hash(p, buf, n);
+        do_hash(p, state->hashsz, buf, n);
     }
 
     qsort_r(gcstats->hash, nhash, state->hashsz, hash_compar, state);
@@ -435,14 +435,15 @@ static int hashbench(int argc, char **argv)
     int buflen = 4096;
     int nmb = n * buflen / 1024 / 1024;
     char *buf = malloc(buflen);
-    u8 hash[16];
+    int hashsz = 32;
+    u8 hash[hashsz];
     int residue = 0;
 
     memset(buf, 1, buflen);
     t0 = rtc();
     for (i=0; i<n; i++) {
         *(int *)buf = i;
-        do_hash(hash, buf, buflen);
+        do_hash(hash, hashsz, buf, buflen);
         residue += hash[0];
     }
     t1 = rtc();
@@ -478,20 +479,21 @@ static void hex2bytes(u8 *b, const char *p)
 static int hashunit(int argc, char **argv)
 {
     char buf[4096];
-    u8 h[16], g[16];
+    int hashsz = 32;
+    u8 h[hashsz], g[hashsz];
     int ntest = 0;
     int buflen;
 
     /* standard test vector */
     buflen = snprintf(buf, sizeof buf, "hello, world\n");
     hex2bytes(h, "f65f341b35981fda842b09b2c8af9bcd");
-    do_hash(g, buf, buflen);
+    do_hash(g, hashsz, buf, buflen);
     ASSERT(memcmp(g, h, sizeof(g)) == 0); ntest++;
 
     /* zero length test vector */
     buflen = 0;
     hex2bytes(h, "cf83e1357eefb8bdf1542850d66d8007");
-    do_hash(g, buf, buflen);
+    do_hash(g, hashsz, buf, buflen);
     ASSERT(memcmp(g, h, sizeof(g)) == 0); ntest++;
 
     printf("hash unit tests passed %d tests\n", ntest);
