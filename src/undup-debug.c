@@ -7,8 +7,6 @@
  * version 3.  See the file COPYING for more information.
  */
 
-#define _GNU_SOURCE /* for qsort_r */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -38,6 +36,8 @@ static void usage(const char *cmd)
     fprintf(stderr, "  dumpstub /path/to/undupfs/stubfile\n");
     fprintf(stderr, "  dumpbucket /path/to/.undupfs/undup.dat\n");
     fprintf(stderr, "  gccheck /path/to/undupfs\n");
+    fprintf(stderr, "  hashbench\n");
+    fprintf(stderr, "  hashunit\n");
     die("");
 }
 
@@ -427,6 +427,77 @@ static int gccheck(int argc, char **argv)
     return 0;
 }
 
+static int hashbench(int argc, char **argv)
+{
+    double t0, t1, t;
+    int i;
+    int n = 10240;
+    int buflen = 4096;
+    int nmb = n * buflen / 1024 / 1024;
+    char *buf = malloc(buflen);
+    u8 hash[16];
+    int residue = 0;
+
+    memset(buf, 1, buflen);
+    t0 = rtc();
+    for (i=0; i<n; i++) {
+        *(int *)buf = i;
+        do_hash(hash, buf, buflen);
+        residue += hash[0];
+    }
+    t1 = rtc();
+
+    t = t1 - t0;
+    printf("%d MB in %.3f sec %.1f MB/sec %.2f nsec/byte r=%d\n",
+            nmb, t, nmb / t, t * 1e9 / (nmb * 1024 * 1024), residue);
+    return 0;
+}
+
+static int hexnibble(int x)
+{
+    if (x >= '0' && x <= '9')
+        return x - '0';
+    if (x >= 'a' && x <= 'f')
+        return x - 'a' + 10;
+    if (x >= 'A' && x <= 'F')
+        return x - 'A' + 10;
+    ASSERT(0 == 1);
+    return 0;
+}
+
+static void hex2bytes(u8 *b, const char *p)
+{
+    int i;
+
+    for(i=0; p[i] && p[i+1]; i+=2) {
+        b[i/2] = hexnibble(p[i]) << 4 | hexnibble(p[i+1]);
+    }
+    ASSERT(p[i] == '\0');
+}
+
+static int hashunit(int argc, char **argv)
+{
+    char buf[4096];
+    u8 h[16], g[16];
+    int ntest = 0;
+    int buflen;
+
+    /* standard test vector */
+    buflen = snprintf(buf, sizeof buf, "hello, world\n");
+    hex2bytes(h, "f65f341b35981fda842b09b2c8af9bcd");
+    do_hash(g, buf, buflen);
+    ASSERT(memcmp(g, h, sizeof(g)) == 0); ntest++;
+
+    /* zero length test vector */
+    buflen = 0;
+    hex2bytes(h, "cf83e1357eefb8bdf1542850d66d8007");
+    do_hash(g, buf, buflen);
+    ASSERT(memcmp(g, h, sizeof(g)) == 0); ntest++;
+
+    printf("hash unit tests passed %d tests\n", ntest);
+    return 0;
+}
+
 struct {
     const char *name;
     int (*func)(int, char **);
@@ -434,6 +505,8 @@ struct {
     { "dumpstub", dumpstub },
     { "dumpbucket", dumpbucket },
     { "gccheck", gccheck },
+    { "hashbench", hashbench },
+    { "hashunit", hashunit },
     { 0, 0 }
 };
 

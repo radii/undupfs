@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <string.h>
 
 #include <unistd.h>
@@ -23,7 +24,7 @@
 
 #include <pthread.h>
 
-#include <openssl/sha.h>
+#include "sha512.h"
 
 #include "shared.h"
 #include "core.h"
@@ -711,10 +712,10 @@ int stub_write_block(struct undup_state *state, struct stub *stub,
 
 void do_hash(void *hash, const void *buf, int n)
 {
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, buf, n);
-    SHA256_Final(hash, &ctx);
+    struct sha512_ctx ctx;
+    sha512_init(&ctx);
+    sha512_update(&ctx, buf, n);
+    sha512_final(&ctx, hash, 16);
 }
 
 int stub_write(struct undup_state *state, struct stub *stub, const void *buf, size_t n, off_t off)
