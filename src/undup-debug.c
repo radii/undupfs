@@ -105,7 +105,7 @@ struct undup_state *debug_init(const char *basedir)
     ASSERT(1 << state->blkshift == state->blksz);
 
     // if ver == 1
-    state->hashsz    = 32; // SHA256
+    state->hashsz    = 32;
 
     state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
     state->bp1 = bloom_setup(filtersz1, bitcount1, state->hashsz);
@@ -184,7 +184,7 @@ static int dumpbucket(int argc, char **argv)
  * so the number of datablocks is the byte length, minus the header, divided
  * by the block size, divided by (N+1) and then multiplied by N to account
  * for the hashblocks.  Then add on any remainder to account for not-yet-hashed
- * blocks.  For 4k blocks and SHA256, N = 4096 / 32 = 128.
+ * blocks.  For 4k blocks with 32 byte (256 bit) hashes, N = 4096 / 32 = 128.
  */
 static u64 bucket_nblock(struct undup_state *state)
 {

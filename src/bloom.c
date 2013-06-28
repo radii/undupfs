@@ -341,7 +341,7 @@ int main(void)
     printf("testing bloom_insert ..."); fflush(stdout);
     {
         int ntest = 0;
-        int hashsz = 32; // SHA256
+        int hashsz = 32;
         int bitsperhash = 7;
         u8 h[10][32];
         struct bloom_params *p;

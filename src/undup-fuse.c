@@ -639,7 +639,7 @@ static int undup_init(const char *basedir)
     ASSERT(1 << state->blkshift == state->blksz);
 
     // if ver == 1
-    state->hashsz    = 32; // SHA256
+    state->hashsz    = 32;
 
     state->bp0 = bloom_setup(filtersz0, bitcount, state->hashsz);
     state->bp1 = bloom_setup(filtersz1, bitcount1, state->hashsz);

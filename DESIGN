@@ -8,6 +8,11 @@ An undupfs mount is layered on another filesystem, such as ext4, called the
 In this example, `/data` is the "undupfs mount" and `/var/data.undupfs` is the
 "host directory".
 
+== Hash and block sizes ==
+
+The block size for undupfs is 4 KiB.  The hash size is 256 bits (32 bytes).
+The hash function used is SHA512 truncated to 32 bytes.
+
 == METADATA ==
 
 File metadata such as owner, permissions, mtime, atime are drawn from the inode
@@ -22,7 +27,7 @@ begins with a header:
 
     struct undup_hdr {
         u32 magic;      // UDFS = 0x55 0x44 0x46 0x53
-        u16 version_hash; // 0x1 = V1_SHA256
+        u16 version_hash; // 0x1 = V1_SHA512
         u16 flags;
         u64 len;
     };
@@ -44,8 +49,9 @@ File content is stored in 4 KiB blocks in one or more *bucket* files under the
 
 A bucket file consists of a header followed by zero or more segments.  A
 completed segment consists of 4096 / 32 = 128 blocks of data, followed by a
-block of data hashes (32 bytes each for SHA256) called a TOC.  A final,
-"incomplete", segment may contain 1 to 127 data blocks without a TOC.
+block of data hashes (32 bytes each) called a TOC.  A final, "incomplete",
+segment may contain 1 to 127 data blocks without a TOC.
 
 Upon initialization, the implementation reads all of the TOC blocks and
-constructs appropriate in-memory data structures to find a data block.
+constructs appropriate in-memory data structures to find a data block given
+a hash value.
