@@ -128,3 +128,8 @@ Performance improvements:
 1. partition blocks into multiple buckets for improved liveness probabilities.
 2. "pivoted parallel Bloom filter test" to speed up Bloom queries.
 3. hash lookaside cache to speed up clone-style workloads.
+
+#### Release History
+
+##### 2013-06-29 undupfs 0.1
+- initial release!
