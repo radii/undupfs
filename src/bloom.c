@@ -443,7 +443,7 @@ int main(void)
             int collided, before, after;
 
             snprintf(a, sizeof a, "%d", i);
-            do_hash(g, a, sizeof(a));
+            do_hash(g, sizeof(g), a, sizeof(a));
             before = bloom_present(p, b, g);
             collided = bloom_insert(p, b, g);
             after = bloom_present(p, b, g);
