@@ -10,6 +10,10 @@ usage() {
 }
 
 [ -z "$1" ] && usage
+if [ ".$1" = ".--version" ] || [ ".$1" = ".-v" ]; then
+    echo "mkfs.undupfs version 0.1 (2013-06-29)" >&2
+    exit 0
+fi
 [ -d $1 ] || usage
 [ -d $1/.undupfs ] && usage
 

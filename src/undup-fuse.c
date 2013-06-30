@@ -660,8 +660,16 @@ void usage(const char *cmd)
     die("Usage: %s -[vd] undupdir mountpoint\n", cmd);
 }
 
+void version(void)
+{
+    fprintf(stderr, "undupfs version 0.1 (2013-06-29)\n");
+    exit(0);
+}
+
 int main(int argc, char **argv)
 {
+    if (argc > 1 && (!strcmp(argv[1], "-v") || !strcmp(argv[1], "--version")))
+        version();
     if (argc < 3)
         usage(argv[0]);
     undup_init(argv[argc-2]);

@@ -512,10 +512,18 @@ struct {
     { 0, 0 }
 };
 
+void version(void)
+{
+    fprintf(stderr, "undupfs-debug version 0.1 (2013-06-29)\n");
+    exit(0);
+}
+
 int main(int argc, char **argv)
 {
     int c, i;
 
+    if (argc > 1 && (!strcmp(argv[1], "-V") || !strcmp(argv[1], "--version")))
+        version();
     while ((c = getopt(argc, argv, "hv")) != EOF)  {
         switch(c) {
         case 'h':
