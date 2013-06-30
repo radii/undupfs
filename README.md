@@ -8,6 +8,13 @@ transparently share storage.  Since deduplication trades off increased
 nonlocality of reference for decreased space consumption, it is especially well
 suited to SSD storage.
 
+#### Contact and discussion
+
+The undupfs mailing list is undupfs@lists.noisebridge.net; subscribe at
+https://www.noisebridge.net/mailman/listinfo/undupfs
+Github pull requests and issue submissions welcomed at
+https://github.com/radii/undupfs
+
 #### Getting Started
 
 0. Install fuse and its development prerequisites (`sudo apt-get install
