@@ -24,4 +24,4 @@ install: all
 
 clean:
 	rm -f *.o
-	rm -f $(targets)
+	rm -f $(targets) bloom
