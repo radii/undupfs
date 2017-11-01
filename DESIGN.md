@@ -1,4 +1,4 @@
-== OVERVIEW ==
+## OVERVIEW
 
 An undupfs mount is layered on another filesystem, such as ext4, called the
 "host filesystem".  The following example may be instructive:
@@ -8,18 +8,18 @@ An undupfs mount is layered on another filesystem, such as ext4, called the
 In this example, `/data` is the "undupfs mount" and `/var/data.undupfs` is the
 "host directory".
 
-== Hash and block sizes ==
+## Hash and block sizes
 
 The block size for undupfs is 4 KiB.  The hash size is 256 bits (32 bytes).
 The hash function used is SHA512 truncated to 32 bytes.
 
-== METADATA ==
+## METADATA
 
 File metadata such as owner, permissions, mtime, atime are drawn from the inode
 on the host directory.  Following our example, `/data/hello.txt` will be
 represented by a stub file `/var/data.undupfs/hello.txt`.
 
-== TOC ==
+## TOC
 
 The stub file in the host directory is used to store undupfs metadata and, for
 short files, file content.  All fields are stored big endian.  The stub file
@@ -39,10 +39,10 @@ The following flag bits are present in the flags field:
 Stub files with DIRECT_CONTENT set contain `len` bytes of user data immediately
 after the `undup_hdr`.
 
-Non-DIRECT stub files have $ceil(`len` / 4096)$ hashes starting after the
+Non-DIRECT stub files have `ceil(len / 4096)` hashes starting after the
 `undup_hdr`.
 
-== CONTENT STORAGE ==
+## CONTENT STORAGE
 
 File content is stored in 4 KiB blocks in one or more *bucket* files under the
 `.undupfs` subdirectory of the host directory.
